@@ -76,3 +76,9 @@ git remote add <新别名> <新的远程仓库地址>
 
 [git创建远程仓库并上传代码到远程仓库中-CSDN博客](https://blog.csdn.net/liuweixiao520/article/details/78971221)
 参考这篇文件，这可以保证每一次的上传到远程仓库能够成功。
+
+#### 删除配置的远程仓库
+
+```
+git remote rm <仓库名>
+```
