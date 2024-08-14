@@ -82,3 +82,31 @@ git remote add <新别名> <新的远程仓库地址>
 ```
 git remote rm <仓库名>
 ```
+
+#### 创建新的分支并切换到该分支
+
+```
+git checkout -b <branchname>
+```
+
+#### 切换分支
+
+```
+git checkout <branchname>
+```
+
+#### 查看分支
+
+```
+git branch # 查看本地分支
+git branch # 查看远程分支
+git branch -a # 查看所有分支
+```
+
+#### 查看提交版本
+
+```
+git log -n num # 只显示num条
+```
+
+![](F:\MarktextPhoto\2024-08-14-11-56-10-image.png)
