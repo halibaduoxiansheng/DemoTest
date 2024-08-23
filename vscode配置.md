@@ -8,9 +8,9 @@
 
 下载后，两项关键插件 中文插件 和 C/C++
 
-![](F:\MarktextPhoto\2024-08-19-17-45-20-image.png)
+![Alt text](F:\MarkTextProject\photo\2024-08-19-17-45-17-image.png)
 
-![](F:\MarktextPhoto\2024-08-19-17-45-25-image.png)
+![Alt text](F:\MarkTextProject\photo\2024-08-19-17-45-25-image.png)
 
 本篇采用gcc编译器：mingw64
 
@@ -20,35 +20,35 @@
 
 **编译环境设置**
 
-![](F:\MarktextPhoto\2024-08-19-17-48-38-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-48-38-image.png)
 
 验证
 
-![](F:\MarktextPhoto\2024-08-19-17-49-49-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-49-47-image.png)
 
 下载clangd插件（查错）
 
-![](F:\MarktextPhoto\2024-08-19-17-50-28-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-50-28-image.png)
 
 配置
 
 于配置中搜索clangd，点击：添加项（设置模仿如下 -I + 地址）
 
-![](F:\MarktextPhoto\2024-08-19-17-51-47-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-51-47-image.png)
 
 于搜索框内输入 >c 选中
 
-![](F:\MarktextPhoto\2024-08-19-17-52-25-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-52-25-image.png)
 
 配置如下
 
-![](F:\MarktextPhoto\2024-08-19-17-52-52-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-52-52-image.png)
 
-![](F:\MarktextPhoto\2024-08-19-17-53-12-image.png)
+![](F:\MarkTextProject\photo\2024-08-19-17-53-12-image.png)
 
 上面图片其中内容(复制于)：
 
-![](F:\MarktextPhoto\2024-08-19-17-54-03-image.png)
+![Alt text](F:\MarkTextProject\photo\2024-08-19-17-54-03-image.png)
 
 **找到最下面去复制**
 

@@ -5,7 +5,7 @@
 官方教程：[Git 教程 | 菜鸟教程](https://www.runoob.com/git/git-tutorial.html)
 如果在命令提示符下 输入  git --version 显示版本号
 
-![](C:\Users\dell\AppData\Roaming\marktext\images\2024-08-12-19-10-52-image.png)
+[.\photo\2024-08-19-17-49-47-image.png]()
 
 # 图理解
 

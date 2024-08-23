@@ -83,7 +83,7 @@ int main(void)
     // printf("%p %p\n", (void *)a2, (void *)b2); 
     // printf("%p %p\n", (void *)&a1, (void *)&b1);
     // exchange(*a2, *b2); // 这和使用exchange(a1, b1); 是一样的
-    // exchange2(a2, b2);
+    exchange2(a2, b2);
     // printf("%p %p\n", (void *)a2, (void *)b2); 
     // printf("%p %p\n", (void *)&a1, (void *)&b1);
     // printf("%u %u\n", a, b); // 2  1  交换了 变得是地址内存储的值(这里和上面都是改变的值 不是地址)
