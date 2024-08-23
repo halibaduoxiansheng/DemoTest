@@ -1,6 +1,6 @@
 # vsCode配置——c语言
 
-现在下载vscode
+现在下载vscode的配置
 
 **下载地址**：
 
