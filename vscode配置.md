@@ -4,13 +4,11 @@
 
 **下载地址**：
 
-[https://code.visualstudio.com/](https://code.visualstudio.com/)
-
 下载后，两项关键插件 中文插件 和 C/C++
 
-![Alt text](F:\MarkTextProject\photo\2024-08-19-17-45-17-image.png)
+![Alt text](F:\MarktextPhoto\50471ecb86d0605957e0260a9c67f2fc08545628.png)
 
-![Alt text](F:\MarkTextProject\photo\2024-08-19-17-45-25-image.png)
+![Alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
 
 本篇采用gcc编译器：mingw64
 
@@ -20,35 +18,35 @@
 
 **编译环境设置**
 
-![](F:\MarkTextProject\photo\2024-08-19-17-48-38-image.png)
+![Alt text](F:\MarktextPhoto\f8b0a2f0e12dbf30f54c65177ac18c7e5ee82180.png)
 
 验证
 
-![](F:\MarkTextProject\photo\2024-08-19-17-49-47-image.png)
+![Alt text](F:\MarktextPhoto\9fc635831a657cfe8c9fd7b4d33655127899b81c.png)
 
 下载clangd插件（查错）
 
-![](F:\MarkTextProject\photo\2024-08-19-17-50-28-image.png)
+![Alt text](F:\MarktextPhoto\23fde8c3299bb7ebe4cfe55d41700773201e489d.png)
 
 配置
 
 于配置中搜索clangd，点击：添加项（设置模仿如下 -I + 地址）
 
-![](F:\MarkTextProject\photo\2024-08-19-17-51-47-image.png)
+![Alt text](F:\MarktextPhoto\a83c465a38f210dd1532b7ec8e43f2baa6fea3a2.png)
 
 于搜索框内输入 >c 选中
 
-![](F:\MarkTextProject\photo\2024-08-19-17-52-25-image.png)
+![Alt text](F:\MarktextPhoto\7c9d6fa4e980224a105222239cb48156d0cc3637.png)
 
 配置如下
 
-![](F:\MarkTextProject\photo\2024-08-19-17-52-52-image.png)
+![Alt text](F:\MarktextPhoto\deb3bf12cf5cb57de504c3bbc93f0ad0cce07a8e.png)
 
-![](F:\MarkTextProject\photo\2024-08-19-17-53-12-image.png)
+![Alt text](F:\MarktextPhoto\83448051d25abadcfbfc2ee2914d485074c6e971.png)
 
 上面图片其中内容(复制于)：
 
-![Alt text](F:\MarkTextProject\photo\2024-08-19-17-54-03-image.png)
+![Alt text](F:\MarktextPhoto\2e4110b8ae74b6645b87170694e0d1007a422a10.png)
 
 **找到最下面去复制**
 

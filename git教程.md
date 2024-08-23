@@ -1,5 +1,7 @@
 # 首先
 
+（插入：MarkText插入图片：![Alt text](F:\MarkTextProject\photo\2024-08-23-17-47-10-image.png)
+
 下载安装配置环境
 
 官方教程：[Git 教程 | 菜鸟教程](https://www.runoob.com/git/git-tutorial.html)
