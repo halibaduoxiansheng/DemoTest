@@ -8,7 +8,7 @@
 
 ![Alt text](F:\MarktextPhoto\50471ecb86d0605957e0260a9c67f2fc08545628.png)
 
-![Alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
+![alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
 
 本篇采用gcc编译器：mingw64
 
