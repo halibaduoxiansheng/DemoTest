@@ -1,5 +1,5 @@
 /*
-    首先一句话，万物皆指针
+    首先一句话，万物皆ke指针
     本篇章主要介绍指针，指针是C语言中一个非常重要的概念，也是C语言中一个比较难理解的概念。
     玩转 -> 指针
 
@@ -16,7 +16,7 @@
     简单说 定义的 int ****ptr; ptr是4级指针 那么 *ptr 就是3级指针，
     **ptr 就是2级指针，***ptr 就是1级指针，****ptr 就是0级指针，也就是变量。
 
-    指针最常用的还是结构体指针，本章未涉及，静待后续update~
+    指针最常用的还是结构体指针，函数指针，本章未涉及，静待后续update~
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,7 +95,7 @@ int main(void)
     uint **a2 = &a1, **b2 = &b1;
     // printf("%p %p\n", (void *)a2, (void *)b2); 
     // printf("%p %p\n", (void *)&a1, (void *)&b1);
-    // exchange(*a2, *b2); // 这和使用exchange(a1, b1); 是一样的
+    // exchange(*a2, *b2); // 这和使用exchange(a1, b1); 是完全等效的 地址也是（本身和指向）
     // exchange2(a2, b2); // 交换了0级指针存储的值（即变量a、b的存储的值交换）
     // printf("%p %p\n", (void *)a2, (void *)b2); 
     // printf("%p %p\n", (void *)&a1, (void *)&b1);
@@ -134,7 +134,7 @@ int main(void)
     // printf("%u %u\n", a, b);
 
     
-    uint ***a3 = &a2, ***b3 = &b2;
+    // uint ***a3 = &a2, ***b3 = &b2;
     // printf("%p %p\n", (void *)a3, (void *)b3);
     // printf("%p %p\n", (void *)&a3, (void *)&b3);
     // exchange2_4(a3, b3);
