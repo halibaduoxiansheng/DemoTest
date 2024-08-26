@@ -59,6 +59,7 @@
   "files.associations": {
     "stdio.h": "c",
     "STDIO.H": "cpp",
-    "time.h": "c"
+    "time.h": "c",
+    "halibaduo_register.h": "c"
   }
 }

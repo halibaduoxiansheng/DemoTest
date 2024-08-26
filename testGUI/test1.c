@@ -56,10 +56,11 @@ int main(void)
 
     // printf("a:%d, b:%d\n", a, b);
 
-    int a = 1, b = 2;
-    int *a1 = &a, *b1 = &b;
-    printf("%p %p\n", (void *)a1, (void *)b1);
-    print_address(a1, b1);
+    // int a = 1, b = 2;
+    // int *a1 = &a, *b1 = &b;
+    // printf("%p %p\n", (void *)a1, (void *)b1);
+    // print_address(a1, b1);
+
 
     return 0;
 }
