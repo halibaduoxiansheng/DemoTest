@@ -18,7 +18,10 @@ void print_binary(uint8_t num);
 #define BIN(x) (1 << (x))
 
 enum {
+<<<<<<< HEAD
     NONE = BIN(0),
+=======
+>>>>>>> 05292657fd5e02c09f8e45cef53f79fae89e920f
     LUNCH = BIN(1),
     DINNER = BIN(2),
     BREAKFAST = BIN(3)
