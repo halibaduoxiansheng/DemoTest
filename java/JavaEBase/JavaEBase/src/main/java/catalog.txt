@@ -1,0 +1,10 @@
+Test   -   打包流程 和 使用Launch4j将jar转化未exe文件
+Test2   -   用户设置定时给qq的某位好友发送消息 （未能完全实现）
+涉及技术    -   扫盘、时间打印、打开网页、
+Test3   -   打字练习（有涉及线程开始与线程终止）
+涉及技术    -   线程开启与关闭、打开excel文件读取
+Test4   -   B站热搜数据快知晓（https://api.bilibili.com/x/web-interface/popular?ps=20&pn=1） // ps代表每次展示20条数据，pn代表第一页
+涉及技术    -   读取json数据并选择输出
+
+/* 后续的将以项目的形式展现 */
+Test5   -

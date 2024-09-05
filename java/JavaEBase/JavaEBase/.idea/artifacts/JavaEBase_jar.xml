@@ -1,0 +1,45 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="JavaEBase:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/JavaEBase_jar</output-path>
+    <root id="archive" name="JavaEBase.jar">
+      <element id="module-output" name="JavaEBase" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/poi/poi-ooxml/5.2.3/poi-ooxml-5.2.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/http-client/google-http-client/1.42.3/google-http-client-1.42.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/fasterxml/jackson/core/jackson-core/2.4.0/jackson-core-2.4.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/zaxxer/SparseBitSet/1.2/SparseBitSet-1.2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/commons/commons-compress/1.21/commons-compress-1.21.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/guava/failureaccess/1.0.1/failureaccess-1.0.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/http-client/google-http-client-apache-v2/1.42.3/google-http-client-apache-v2-1.42.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/oauth-client/google-oauth-client/1.34.1/google-oauth-client-1.34.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/j2objc/j2objc-annotations/1.3/j2objc-annotations-1.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/commons/commons-collections4/4.4/commons-collections4-4.4.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/httpcomponents/httpcore/4.4.16/httpcore-4.4.16.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/commons-io/commons-io/2.11.0/commons-io-2.11.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/logging/log4j/log4j-api/2.18.0/log4j-api-2.18.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/xmlbeans/xmlbeans/5.1.1/xmlbeans-5.1.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/code/gson/gson/2.10/gson-2.10.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/github/virtuald/curvesapi/1.07/curvesapi-1.07.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/httpcomponents/httpclient/4.5.14/httpclient-4.5.14.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/io/opencensus/opencensus-api/0.31.1/opencensus-api-0.31.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/poi/poi/5.2.3/poi-5.2.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/commons-logging/commons-logging/1.2/commons-logging-1.2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/commons-codec/commons-codec/1.15/commons-codec-1.15.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/io/grpc/grpc-context/1.27.2/grpc-context-1.27.2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/fasterxml/jackson/core/jackson-annotations/2.4.0/jackson-annotations-2.4.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/checkerframework/checker-qual/3.12.0/checker-qual-3.12.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/logging/log4j/log4j-core/2.20.0/log4j-core-2.20.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/http-client/google-http-client-gson/1.42.3/google-http-client-gson-1.42.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/api-client/google-api-client/2.2.0/google-api-client-2.2.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/errorprone/error_prone_annotations/2.11.0/error_prone_annotations-2.11.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/json/json/20230227/json-20230227.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/slf4j/slf4j-api/1.7.32/slf4j-api-1.7.32.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/org/apache/poi/poi-ooxml-lite/5.2.3/poi-ooxml-lite-5.2.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/io/opencensus/opencensus-contrib-http-util/0.31.1/opencensus-contrib-http-util-0.31.1.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/fasterxml/jackson/core/jackson-databind/2.4.0/jackson-databind-2.4.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="D:/software/apache-maven-3.9.0/mvn_resp/com/google/guava/guava/31.1-jre/guava-31.1-jre.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>

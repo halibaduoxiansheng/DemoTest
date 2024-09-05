@@ -1,0 +1,19 @@
+JOptionPane中常用的方法
+public static void showMessageDialog(Component parentComponent,Object message,String title,int messageType,Icon icon); ——消息对话框
+
+public static int showConfirmDialog(Conponent parentComponent,Object message,String title,int optiontype,int messageType,Icon icon); ——确认对话框
+
+public static String showInputDialog(Component parentComponent,Object message,String title,int messageType); ——文本框输入(一种)
+//文本框的标题部分就是显示的默认部分
+
+public static Object showInputDialog(Componen parentComponent,Object message,String title,int messageType,Icon icon,Object[] selectionValue,Object initValue);——下拉列表或列表框的显示方式(一种)
+
+//相比上面的showInputDialog外,还多一个图标
+public static int showOptionDialog(Component perentComponent,Object message,String title,int optiontype,int messageType,Icon icon,Object[] selecionValue,Object initValue);
+
+
+
+
+
+
+

@@ -1,0 +1,11 @@
+Test1——第一个输出代码、输入代码，引用，默认值，instanceof，Random
+Test2——数组、对象、方法、命令行、length属性（length()）
+Test3——带参方法、构造方法,this，静态全局变量的定义，super()
+Test4——屏蔽、访问权限、包、保留小数
+Test5——java常用类、等待输入的JOptionPane、随机数两种方法，相等判断、"\n"、定义数组的时候并初始化
+Test6——Math.PI、Math.abs()、Math.sin()、Math.cos()、Math.tan()、Math.pow()、Math.sqrt()、Math.log
+Test7——JOptionPane类内容(showConfirmDialog)确认对话框、(showInputDialog)输入对话框、(showMessageDialog)消息对话框,Object类
+JOptionPane用来创建四种标准的标准对话框:确认对话框、消息对话框、输入对话框和选项对话框。
+Test8——(高难度)JOptionPane.showOptionDialog，int转化为String
+Test9——(高难度)JOptionPane.showInputDialogs
+Test10——继承、覆盖，别名,对象强制转化
