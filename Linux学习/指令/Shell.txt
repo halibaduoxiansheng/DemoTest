@@ -1,0 +1,15 @@
+Shell是一门用C语言编写的程序
+使用vi/vim新建一个文件，尾缀sh
+然后里面的第一行代码都约定熟成的写#!/bin/bash
+
+运行Shell的两种方法（echo "Hello World"）
+1.作为可执行程序
+chmod +x ./text.sh # 使脚本具有执行权限
+./test.sh # 执行脚本
+2.作为解释器参数(容易成功一些)
+/bin/sh test.sh
+
+grep "am" firstshell.sh  （作用：在这个文件中查找所有包含am的句子，反馈出来）
+
+man cd （就是查看Linux对于cd的帮助文档）
+kill -9 su (强制终止)

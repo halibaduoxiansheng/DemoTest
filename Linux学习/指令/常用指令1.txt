@@ -1,0 +1,31 @@
+可以使用man cp来查看各个命令的使用文档 冒号wq是退出查看
+mkdir: 创建一个新的目录
+rmdir：删除一个空的目录
+cp：复制文件或目录
+mv name1 name2 就是将name1中的所有内容挪到name2中（重命名）
+vi/vim的使用
+	i 切换到输入模式
+	x 删除当前光标的所在处的字符
+	：切换到底线命令模式
+	q 退出程序
+	w 保存文件
+
+创建一个文件  vi test.txt  （到这了还不知道ESC和:wq那可以game over~了（i是开始输入））
+
+yum是一个在Fedora和Redhat以及SUSE中的Shell前端软件包管理器
+yum install ~ 是安装
+yum remove ~ 是移除
+
+list 命令是寻找 （平时还是使用find）
+cat ~ 打开查看这个文件
+
+修改ip的地址 (先cd /)
+vim /etc/sysconfig/network-scripts/ifcfg-ens33
+修改数据后 才是重启网卡
+ifdown ens33 后 ifup ens33
+
+sort 某某文件 作用：排序 从小到大 认为空白行是最小的
+cat -u 某某文件
+sort -c 某某文件 检查文件 discover就是不是
+
+echo $?    作用:输出状态码

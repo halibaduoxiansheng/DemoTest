@@ -1,0 +1,33 @@
+(留意，连一个看不见的空格都不能缺少)
+先进入管理员的权限下：
+（1）sudo password root
+（2）su - root
+安装好后第一步肯定是修改配置文件解决没有连接上网络
+（1）cd /：	回到根目录   （change dictionary）
+（2）cd /etc/sysconfig/network-scripts/:		进入这个目录
+（3）vi ifcfg-ens33
+ (4) ONBOOT=no修改为ONBOOT=yes
+（5）service network restart  重启网卡
+pwd：	显示当前目录 这也是必须学会的第一个 知道我们自己在哪里
+cd ..：	切换到上一级目录
+dir:	查看当前目录下的所有文件 （Linux中常使用的是ls） ls -lh
+cd 目录名: 切换至该目录下(留心需要切换到的目录一定是已经在本目录下的)
+clear	:清屏
+cd /:	回到根目录
+不小心按了crtl+s卡住了，可以再按ctrl+q就好了
+ESC： 退出编辑功能
+:q!:	不保存退出
+: wq退出
+su - root:	进入管理管的权限下登录
+ctrl+Z:	可以停止ping的进程
+curl web地址: 可以前往该web下
+halt：	关机
+find 文件名： 探索是否存在该文件
+reboot： 重启
+echo $LANG: 查看当前使用的语言
+
+导航到不是在该区域的位置 可以使用 cd /etc/ （etc为例）
+安装已经下载好的rpm软件  sudo yum install 文件名and位置(安装本地的sudo yum loacalsatll rpm软件)
+
+将deb文件弄成rpm文件 alien -r 文件名 generated
+

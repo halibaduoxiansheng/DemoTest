@@ -33,6 +33,7 @@ typedef unsigned int uint;
 // 虽然传入的是形参 但是都是指针 同一个地址
 void exchange(uint *a, uint *b)
 {
+    printf("%p %p\n", (void *)a, (void *)b); // 0x7ffeedd7c8d0 0x7ffeedd7c8d4
     uint temp = *a; // *a表示解引用，即获取指针a指向的变量的值（同时是从地址上获取的）
     *a = *b;
     *b = temp;
@@ -75,9 +76,9 @@ int main(void)
     uint a = 1, b = 2;
     uint *a1 = &a, *b1 = &b;
     uint **a2 = &a1, **b2 = &b1;
-    // printf("%p %p\n", (void *)a1, (void *)b1); //
-    // printf("%p %p\n", &a, &b); // 
-    //exchange(a1, b1);
+    printf("%p %p\n", (void *)a1, (void *)b1); //
+    printf("%p %p\n", &a, &b); // 
+    exchange(a1, b1);
     // printf("%p %p\n", (void *)a1, (void *)b1); // 存储指针的地址没有变
     //printf("%p %p\n", &a, &b); // 存储变量a 变量b 的地址没有变
     //printf("%p %p\n", (void *)&*a1, (void *)&*b1); // 就是变量a 变量b 的地址
@@ -103,10 +104,10 @@ int main(void)
     // printf("%u %u\n", **a2, **b2); // 依旧是 1 2 这里改变的只是 二级指针本身的地址值(且还是改变的副本地址值)
     // printf("%p %p\n", (void *)a2, (void *)b2); // 0x7ffeedd7c8d4 0x7ffeedd7c8d8
 
-    uint ***a3 = &a2, ***b3 = &b2;
-    exchange2_3(a3, b3);
-    printf("%u %u\n", ***a3, ***b3); // 2 1 交换了 只是改变了 二级指针的地址值 
-    printf("%u %u\n", **a2, **b2);
+    // uint ***a3 = &a2, ***b3 = &b2;
+    // exchange2_3(a3, b3);
+    // printf("%u %u\n", ***a3, ***b3); // 2 1 交换了 只是改变了 二级指针的地址值 
+    // printf("%u %u\n", **a2, **b2);
     // 这里能看出来  再多级指针 一直追 也只是改变地址  真实的最原始的变量值并没有改变
 
     //printf("%u %u\n", a, b);
