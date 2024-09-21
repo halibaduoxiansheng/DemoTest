@@ -39,9 +39,7 @@
   "C_Cpp_Runner.linkerArgs": [],
   "C_Cpp_Runner.includePaths": [
     "E:\\software\\Microsoft Visual Studio\\VC98\\Include",
-    "D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include",
-    "D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include-fixed",
-    "D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/../../../../x86_64-w64-mingw32/include"
+    " D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include  D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/include-fixed  D:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/8.1.0/../../../../x86_64-w64-mingw32/include"
   ],
   "C_Cpp_Runner.includeSearch": [
     "*",
