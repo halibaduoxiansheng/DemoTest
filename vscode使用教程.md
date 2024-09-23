@@ -7,3 +7,5 @@ Ctrl+Q：Q键位松开，Ctrl按住不放，可以鼠标操作选项
 Ctrl+G： 输入行号
 Ctrl+B：左侧边框栏开关
 Ctrl+I： 补全开关
+
+Shift+Alt+F：全选后，按下，格式化文件
