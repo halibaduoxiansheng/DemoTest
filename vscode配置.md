@@ -8,7 +8,7 @@
 
 ![Github Image](assets/1d56f55dfa2b6bda3dfdfc9b7ba0d8fa4a707ff1.png)
 
-![alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
+![Github Image](assets/fcfb2479dd7c8cf0e1d5981da7b928ffbefe25b8.png)
 
 本篇采用gcc编译器：mingw64
 
@@ -18,7 +18,7 @@
 
 **编译环境设置**
 
-![Alt text](F:\MarktextPhoto\f8b0a2f0e12dbf30f54c65177ac18c7e5ee82180.png)
+![](assets/f8b0a2f0e12dbf30f54c65177ac18c7e5ee82180.png)
 
 验证
 
