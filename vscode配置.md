@@ -6,7 +6,7 @@
 
 下载后，两项关键插件 中文插件 和 C/C++
 
-<img title="" src="file:///F:/MarktextPhoto/1d56f55dfa2b6bda3dfdfc9b7ba0d8fa4a707ff1.png" alt="">
+![](assets/1d56f55dfa2b6bda3dfdfc9b7ba0d8fa4a707ff1.png)
 
 ![alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
 
