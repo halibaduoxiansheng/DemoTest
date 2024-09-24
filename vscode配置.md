@@ -6,7 +6,7 @@
 
 下载后，两项关键插件 中文插件 和 C/C++
 
-![Alt text](F:\MarktextPhoto\50471ecb86d0605957e0260a9c67f2fc08545628.png)
+![Alt Text](F:\MarktextPhoto\1d56f55dfa2b6bda3dfdfc9b7ba0d8fa4a707ff1.png)
 
 ![alt text](F:\MarktextPhoto\6086af215cab400eb2a97c356e7fff02a0c1b65c.png)
 
