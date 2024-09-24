@@ -22,31 +22,31 @@
 
 验证
 
-![Alt text](F:\MarktextPhoto\9fc635831a657cfe8c9fd7b4d33655127899b81c.png)
+![Github Image](assets/9fc635831a657cfe8c9fd7b4d33655127899b81c.png)
 
 下载clangd插件（查错）
 
-![Alt text](F:\MarktextPhoto\23fde8c3299bb7ebe4cfe55d41700773201e489d.png)
+![](assets/23fde8c3299bb7ebe4cfe55d41700773201e489d.png)
 
 配置
 
 于配置中搜索clangd，点击：添加项（设置模仿如下 -I + 地址）
 
-![Alt text](F:\MarktextPhoto\a83c465a38f210dd1532b7ec8e43f2baa6fea3a2.png)
+![](assets/a83c465a38f210dd1532b7ec8e43f2baa6fea3a2.png)
 
 于搜索框内输入 >c 选中
 
-![Alt text](F:\MarktextPhoto\7c9d6fa4e980224a105222239cb48156d0cc3637.png)
+![](assets/7c9d6fa4e980224a105222239cb48156d0cc3637.png)
 
 配置如下
 
-![Alt text](F:\MarktextPhoto\deb3bf12cf5cb57de504c3bbc93f0ad0cce07a8e.png)
+![](assets/deb3bf12cf5cb57de504c3bbc93f0ad0cce07a8e.png)
 
-![Alt text](F:\MarktextPhoto\83448051d25abadcfbfc2ee2914d485074c6e971.png)
+![](assets/83448051d25abadcfbfc2ee2914d485074c6e971.png)
 
 上面图片其中内容(复制于)：
 
-![Alt text](F:\MarktextPhoto\2e4110b8ae74b6645b87170694e0d1007a422a10.png)
+![](assets/2e4110b8ae74b6645b87170694e0d1007a422a10.png)
 
 **找到最下面去复制**
 
