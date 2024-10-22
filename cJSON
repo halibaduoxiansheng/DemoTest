@@ -1,0 +1,16 @@
+库 cJSON.c 与 cJOSN.h
+  简单使用：
+cJSON教程
+创建一个cJSON对象
+	cJSON *ack_json = cJSON_CreateObject();
+往cJSON对象中添加属性
+	static char *business_json_name[] = {"session_id", "type", "business_type", "command", "status", "message", "voice_id", "sign"};
+cJSON_AddStringToObject(ack_json, business_json_name[0], t_alarm.session_id);/*增加字符串属性*/
+cJSON_AddNumberToObject(ack_json, business_json_name[1], 2); /*增加数字属性*/
+
+将json对象转换为字符串发送
+char *json_buf = cJSON_Print(ackjson);
+
+使用完成，释放空间
+free(json_buf);
+cJSON_Delete(ack_json);
