@@ -112,3 +112,16 @@ git log -n num # 只显示num条
 ```
 
 ![](F:\MarktextPhoto\2024-08-14-11-56-10-image.png)
+
+如果是在新电脑上的编辑，而且本地版本还要高于github的版本可以：
+```
+git push -f origin master #有冲突会提示
+```
+然后
+```
+git push origin master # 提交
+```
+获取可以一开始就直接强制提交
+```
+git push -f origin master
+```
