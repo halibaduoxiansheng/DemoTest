@@ -71,7 +71,7 @@ git remote set-url origin https://新的远程仓库地址
 #### 增加配置
 
 ```
-git remote add <新别名> <新的远程仓库地址>
+git remote add <新别名> <新的远程仓库地址> # git remote add origin ...
 ```
 
 #### 增加SSH
