@@ -1,0 +1,34 @@
+0x1800 – 0x26FF ：服务项类型
+0x2700 – 0x27FF ：单位
+0x2800 – 0x28FF ：属性类型 (服务和特征声明)
+0x2900 – 0x29FF ：描述符类型
+0x2A00 – 0x7FFF ：特征值类型
+
+
+句柄从0x01开始,最大0xffff
+
+struct uble_gatt_data {
+    uint16 att_type, properties;
+    uint32 att_value; /*value att_type or uble_value_entry*/
+};
+
+比如
+{0x2800/*Primary service*/, 0, 0x1800 /*Generic Access service*/},
+
+0x2800是表明为Primary service服务类型，
+0是表明默认
+0x1800就是UUID
+
+一个完整的Ble的结构
+句柄 + 类型 + 权限 + 值
+
+服务类型 使用 UUID 标识，且合规的都是全球唯一的
+标准的UUID是一串16字节十六进制字符串
+
+
+
+0x2800 是定义一个 Primary Service 的标准 UUID，用来标识一个服务的开始
+
+0x1800 是 Generic Access Service 的 UUID
+
+0x2902 是 Client Characteristic Configuration Descriptor (CCCD) 的 UUID，它是与通知特征关联的描述符，用于启用或禁用通知或指示功能。
