@@ -1,0 +1,20 @@
+// 初始化
+void list_init(struct list_head *head)
+{
+	head->prev = head;
+	head->next = head;
+}
+// 外放 插入节点函数
+void list_add(struct list_head *new, struct list_head* head)
+{
+	_list_add(new, head, head->next);
+}
+// 内部调用插入函数
+void _list_add(struct list_head* new, struct list_head* head, struct list_head* next) 
+{
+	head->prev = new;
+	new->next = head;
+	
+	new->prev = head;
+	head->next = new;
+}
