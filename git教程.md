@@ -128,4 +128,8 @@ git push -f origin master
 传输大的文件，首先：
 https://git-lfs.com/
 下载安装，然后
-git init / git lfs install / git lfs track "*.cab" # replace your file / git add * / git commit -m "ok" / git push -f origin master
+git init / git lfs install / git lfs track "*.cab" # replace your file / git add * / git commit -m "ok" / git push -f origin master、
+
+固定下载某一分支
+git clone -b master <repository_url>
+
