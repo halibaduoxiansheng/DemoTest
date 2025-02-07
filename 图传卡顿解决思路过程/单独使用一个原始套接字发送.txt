@@ -1,0 +1,3170 @@
+/*system include*/
+#include "sys_config.h"
+#include "typesdef.h"
+#include "list.h"
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/netdb.h"
+#include "lwip/sys.h"
+#include "lwip/ip_addr.h"
+#include "lwip/tcpip.h"
+#include "osal/string.h"
+#include "osal/semaphore.h"
+#include "osal/mutex.h"
+#include "osal/irq.h"
+#include "osal/task.h"
+#include "osal/sleep.h"
+#include "osal/timer.h"
+#include "osal/work.h"
+#include "lib/umac/umac.h"
+#include "hal/dvp.h"
+#include "lib/video/dvp/jpeg/jpg.h"
+#include "hal/jpeg.h"
+#include "syscfg.h"
+#include <stdio.h>
+#include "lwip\sockets.h"
+#include "lwip\netif.h"
+#include "lwip\dns.h"
+//#include "sysctrl.h"
+#include "lwip\api.h"
+#include "lwip\tcp.h"
+#include <event.h>
+#include <log.h>
+#include <frame.h>
+#include <rtp.h>
+#include "spook_config.h"
+//#include <linux/linux_mutex.h>
+#include "lwip/api.h"
+#include <csi_kernel.h>
+#include "ota.h"
+//#include "flash.h"
+#include "socket_module.h"
+#include "dev/csi/hgdvp.h"
+//#include "boot_lib.h"
+#include "hal/spi_nor.h"
+#include "lib/ota/fw.h"
+/*user include*/
+#include "camera_pro.h"
+#include "i4s.h"
+#include "i4s_port.h"
+#include "i4shttp.h"
+//audio_include
+	#include "newaudio.h"
+/*MICRO*/
+#define CPRO_HDR_SZIE 	(sizeof(struct cProBasic))
+
+#define I4S_BUF_SIZE		1500
+#define AUDIO_OPEN 0//1开启音频
+/*Task Status*/
+enum{
+	TASK_STOP = 0,
+	TASK_RUN,
+	TASK_QUIT,
+};
+
+//AUDIO_TYPE = 5;
+/*Video status*/
+enum{
+	VIDEO_STOP = 0,
+	VIDEO_START ,
+};
+
+#if EAR_TEST_FLAG
+#else
+typedef struct tvideo_hdr_param{
+   uint8_t* ptk_ptr;
+    uint32_t ptklen;	
+    uint8_t frame_id;
+    uint32_t is_eof;
+    uint32_t frame_cnt;
+}TV_HDR_PARAM_ST, *TV_HDR_PARAM_PTR;
+#endif
+typedef struct _vcapacity_t{
+	struct{
+		uint8_t cap_gsensor 	:1;
+		uint8_t cap_reserved	:7;
+	}cap_bits;
+	
+	uint8_t capacity;
+}vcapacity_t;
+
+typedef struct vtconf_t{
+	uint8_t version; // video transfer protocol version
+	uint8_t hdsize; //sub header size
+}vtcfg;
+
+typedef struct _con_t{
+	volatile uint8_t status; //connect or disconnect	
+	int sockfd;	/*socket fd*/
+	struct sockaddr_in addr;	
+}con_t;
+
+typedef struct _video_t{
+	void *thread; /*thread task id*/
+	struct os_mutex mutex;
+	con_t connections;
+}video_t; /*video releative setting*/
+
+typedef struct _proto_t{
+	int cmd_sockfd;	/*socket fd*/
+	int pic_sockfd;	
+	uint8_t buffer[I4S_BUF_SIZE];
+	uint16_t port;	/*listen port*/
+	void *thread; /*thread task id*/
+}proto_t; /*protocol handle struct*/
+
+typedef struct _event_t{
+	uint8_t wifi_connected	:1;
+	uint8_t have_addr		:1;	
+	int sockfd;
+	uint16_t port;	/* port*/
+	struct in_addr addr;
+	void *thread; /*thread task id*/
+}event_t;
+
+typedef struct _lic_option_t{
+	uint8_t lic_auto_gen;	
+	uint8_t lic_done; //generate done or read flash done
+	struct cProLic lic;
+}lic_option_t;
+
+typedef struct _oem_info_t{
+	uint8_t flags;
+	oeminfo_ap_t ap_info;
+	oeminfo_net_t net_info;
+	oeminfo_base_t base_info;
+}oem_info_t;
+
+typedef struct _config_t{
+	vcapacity_t capacity;
+	uint8_t mac[6];
+	lic_option_t license; 
+	oem_info_t oem;
+}config_t;
+
+typedef struct _video_trans_t{
+	volatile uint8_t status; //RUN STOP	
+	config_t	config;
+	proto_t		protocol;
+	video_t		video;
+	event_t  	events;
+}video_trans_t;
+
+typedef struct _callback_t{
+	
+}callback_t;
+//Golbal Context
+video_trans_t wifi_camera;
+#define WIFI_RUN_STATUS		(wifi_camera.status)
+
+struct firmwareHeader{
+	int32_t magic;  /*Firmware Magic*/
+	uint8_t md5[32];/*firmware md5*/
+	int32_t size;   /*firmware size*/
+}__attribute__((__packed__));
+
+
+typedef struct bkSoc_UpgradeCtx_t{
+	uint8 have_init;
+	uint8 *wr_buf;
+	uint16 wr_last_len ;
+	uint32 flash_address;
+	uint32 flash_len;
+	uint8 *wr_tmp_buf;
+	//DD_HANDLE flash_hdl;
+	
+	uint16_t seqno_init;
+	uint16_t seqno_data;
+	struct firmwareHeader fw_header;
+	int32_t rcv_size;
+	uint8_t upgrade_ok;
+}bkSoc_UpgradeCtx;
+
+bkSoc_UpgradeCtx bkUpgrade = {.have_init = 0};
+
+// ethernet header structure
+struct ethheader {
+    unsigned char       dsta[6]; // 目标 MAC 地址
+    unsigned char       srca[6]; // 源 MAC 地址
+    uint16_t            type; // 上层协议类型
+};
+
+// IP 头部结构
+typedef unsigned int uint32_t;
+struct ip_header {
+    uint8_t  iph_ihl:4, iph_ver:4;
+    uint8_t  iph_tos;
+    uint16_t iph_len; // 2
+    uint16_t iph_id;
+    uint16_t iph_offset;
+    uint8_t  iph_ttl;
+    uint8_t  iph_protocol;
+    uint16_t iph_checksum;
+    uint32_t iph_saddr;
+    uint32_t iph_daddr;
+}__attribute__((__packed__));
+
+// UDP 头部结构
+struct udp_header {
+    uint16_t udp_sport; // 源端口
+    uint16_t udp_dport; // 目的端口
+    uint16_t udp_len;   // UDP数据包长度
+    uint16_t udp_checksum; // UDP校验和
+};
+
+// TCP 头部结构
+// struct tcp_header {
+//     uint16_t tcp_sport;    // 源端口
+//     uint16_t tcp_dport;    // 目的端口
+//     uint32_t tcp_seq;      // 序列号
+//     uint32_t tcp_ack;      // 确认号
+//     uint8_t  tcp_offset;   // 数据偏移，指示TCP头部的长度
+//     uint8_t  tcp_flags;    // 标志位（如SYN, ACK, FIN等）
+//     uint16_t tcp_window;   // 窗口大小
+//     uint16_t tcp_checksum; // TCP校验和
+//     uint16_t tcp_urgent;   // 紧急指针
+// };
+
+
+// 伪头部结构（UDP校验和计算需要）
+struct pseudo_header {
+    uint32_t source_address;
+    uint32_t dest_address;
+    uint8_t placeholder;
+    uint8_t protocol;
+    uint16_t udp_length;
+};
+
+
+volatile uint32_t gSensor = 8;
+volatile uint16_t lseqNo = 0;
+
+extern volatile struct list_head *usr_p;			//åºç¨çèç¹æé?
+extern volatile struct list_head free_tab;			//ç©ºé²åè¡¨ï¼å­æ¾ç©ºé´èç?
+extern struct dvp_device *dvp_test;
+static int flag=0;
+static volatile int updata_finish=0;
+
+static volatile uint8_t notify_force = 0;
+
+static volatile int earpark_test = 0;
+
+extern uint8_t qc_mode;
+
+//callback
+op_cb op_callback; /*operation callback*/
+op_cb recoder_callback; /*operation callback*/
+
+int (*led_callback)(struct cProLed*)  = NULL;
+int (*common_callback)(uint8_t *, uint16_t *)  = NULL;
+int op_sock=0;
+static int offset = 0;
+
+static int i4s_set_oem_info_fun_flag=0;
+static uint8_t mac[8];
+static int8_t vhstart = 1;
+uint8_t recoder_flag = 0; //0 no recoder 1 recoder
+
+#define I4S_SUPPORT_MULTI_USER		1
+
+#ifdef I4S_SUPPORT_MULTI_USER
+#define I4S_MAX_CLIENTS			8
+typedef struct _client_t{
+	uint8_t vaild;
+	uint8_t first_connect;
+	uint8_t mac[6];
+	struct in_addr addr;
+	uint16_t img_port;	/* image port*/
+}client_t;
+
+static client_t clients[I4S_MAX_CLIENTS];
+volatile uint8_t active_client = I4S_MAX_CLIENTS;
+#endif
+
+
+static uint16_t checksum(void *b, int len) {
+    uint16_t *buf = b; // XXX 每次++是两字节 而 uin8_t *buf 是每次一字节
+    uint32_t sum = 0;
+    uint16_t result;
+
+    // 计算 16 位反码加和
+    for (sum = 0; len > 1; len -= 2)
+        sum += *buf++;
+    if (len == 1)
+        sum += *(unsigned char *)buf;
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+    result = ~sum;
+    return result;
+}
+/*-------sem----------*/
+//信号量创建
+static struct os_semaphore i4s_sem = {0,NULL};
+void i4s_sema_init()
+{
+	os_sema_init(&i4s_sem,0);
+}
+
+void i4s_sema_down(int32 tmo_ms)
+{
+	os_sema_down(&i4s_sem,tmo_ms);
+	//printf("$\n");
+}
+
+void i4s_sema_up()
+{
+	os_sema_up(&i4s_sem);
+	//printf("@\n");
+}
+
+
+uint16_t aport = 0;
+int i4s_send_stream_control(void);
+
+void *I4S_audio_task(const char *name);
+/***********************************************************************************/
+/*				             FUNCTION DECLARATION								   */
+/*																				   */
+/***********************************************************************************/
+uint8_t i4s_get_capacity(void);
+static int app_deal_close_video(void);
+
+/***********************************************************************************/
+/*				             STATIC CAMERA FUNCTION								   */
+/*																				   */
+/***********************************************************************************/
+#ifdef I4S_SUPPORT_MULTI_USER
+uint8_t i4s_get_location_by_dhcp(uint8_t event, struct sockaddr_in *addr, uint8_t *mac)
+{
+	uint8_t index = 0;
+	
+	__disable_irq();
+
+	I4SC_FATAL("client Event:%d add:%x\r\n", event, addr->sin_addr.s_addr);
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(event == 1 &&
+			clients[index].vaild == 0){//add		
+			os_memcpy(&(clients[index].addr), &(addr->sin_addr), sizeof(struct in_addr));
+			os_memcpy(clients[index].mac, mac, sizeof(clients[index].mac));
+			clients[index].vaild = 1;
+			clients[index].first_connect = 1;
+			__enable_irq();
+			I4SC_FATAL("IP add:%x\r\n", clients[index].addr.s_addr);
+			return index;
+		}else if(event == 0 &&
+				clients[index].vaild ==1 && 
+				!(os_memcmp(mac, clients[index].mac, sizeof(clients[index].mac)))){//remove	
+			I4SC_FATAL("IP remove:%x\r\n", clients[index].addr.s_addr);
+			os_memset(&(clients[index]), 0, sizeof(client_t));
+			__enable_irq();
+			return index;
+		}
+	}
+	
+	__enable_irq();
+
+	return I4S_MAX_CLIENTS;
+}
+
+static uint8_t i4s_get_location_by_ip(struct sockaddr_in *addr)
+{
+	uint8_t index = 0;
+	
+	__disable_irq();
+
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(clients[index].vaild == 1 &&
+				clients[index].addr.s_addr == addr->sin_addr.s_addr){			
+			break;
+		}
+	}
+	if(index < I4S_MAX_CLIENTS){
+		__enable_irq();
+		return index;
+	}
+
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(clients[index].vaild == 0){			
+			os_memcpy(&(clients[index].addr), &(addr->sin_addr), sizeof(struct in_addr));
+			clients[index].vaild = 1;
+			clients[index].first_connect = 1;
+			__enable_irq();
+			I4SC_FATAL("IP add:%x\r\n", clients[index].addr.s_addr);
+			return index;
+		}else if(clients[index].addr.s_addr == addr->sin_addr.s_addr){			
+			__enable_irq();
+			return index;
+		}
+	}
+	
+	__enable_irq();
+
+	return I4S_MAX_CLIENTS;
+}
+
+static uint8_t i4s_find_client_by_ip(struct sockaddr_in *addr)
+{
+	uint8_t index = 0;
+
+	__disable_irq();
+
+	if(active_client != I4S_MAX_CLIENTS&&
+			clients[active_client].vaild == 1 && 
+		clients[active_client].addr.s_addr == addr->sin_addr.s_addr){			
+		__enable_irq();
+		I4SC_FATAL("Find Client %d\r\n", active_client);
+		return 1;
+	}
+		
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(clients[index].addr.s_addr == addr->sin_addr.s_addr){
+			if(clients[index].first_connect){				
+				__enable_irq();
+				I4SC_FATAL("->%x first connect\r\n", addr->sin_addr.s_addr);
+				return 1;
+			}
+			break;
+		}
+	}
+
+	if(active_client == I4S_MAX_CLIENTS){
+		__enable_irq();
+		I4SC_FATAL("No client\r\n");
+		return 1;
+	}
+	__enable_irq();
+
+	return 0;
+}
+
+static uint8_t i4s_multi_client_open_video(struct sockaddr_in *addr, uint16_t *port, uint8_t force_grab)
+{
+	uint8_t index = 0;
+
+	__disable_irq();
+
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(clients[index].vaild && clients[index].addr.s_addr == addr->sin_addr.s_addr){
+			clients[index].img_port = *port;
+			break;
+		}
+	}
+	if(index >= I4S_MAX_CLIENTS){
+		__enable_irq();
+		I4SC_FATAL("No vaild client\r\n");
+		return 0;
+	}
+
+	if(active_client == I4S_MAX_CLIENTS || force_grab ||
+			clients[index].first_connect){
+		active_client = index;		
+		clients[index].first_connect = 0;
+		__enable_irq();
+		I4SC_FATAL("New client active:%d %d\r\n", active_client, force_grab);
+		return 0;
+	}else if(clients[active_client].addr.s_addr != addr->sin_addr.s_addr){		
+		__enable_irq();
+		I4SC_FATAL("other client try active:%d\r\n", active_client);
+		return 1;
+	}
+
+	__enable_irq();
+
+	return 0;
+}
+
+static void i4s_multi_client_close_video(struct sockaddr_in *addr)
+{
+	uint8_t index = 0;
+
+	__disable_irq();
+
+	for(index = 0; index < I4S_MAX_CLIENTS; index++){
+		if(clients[index].vaild && clients[index].addr.s_addr == addr->sin_addr.s_addr){
+			break;
+		}
+	}
+	if(index == active_client){
+		I4SC_FATAL("client close:%d\r\n", active_client);	
+		active_client = I4S_MAX_CLIENTS;
+	}
+	
+	__enable_irq();
+}
+
+static void i4s_multi_client_init(void)
+{
+	os_memset(&clients, 0, sizeof(clients));
+	active_client = I4S_MAX_CLIENTS;
+	I4SC_FATAL("client multi init\r\n");	
+}
+#endif
+
+
+static inline void _get_mac_from_cache(uint8_t *mac)
+{
+	os_memcpy(mac, wifi_camera.config.mac, 6);
+}
+
+static inline void _set_mac_to_cache(uint8_t *mac)
+{
+	os_memcpy(wifi_camera.config.mac, mac, 6);
+}
+
+static int app_deal_get_license(uint8_t *payload, int *paysize)
+{
+	int ret = 0;
+
+	if(!payload || !paysize){
+		return 1;
+	}
+
+	struct cProLic *lic = (struct cProLic *)(payload);
+	/*Write License to Flash*/
+	if(wifi_camera.config.license.lic_done == 1){
+		os_memcpy(lic, &(wifi_camera.config.license.lic), sizeof(struct cProLic));
+		I4SC_FATAL("GetLicense From Cache\r\n");
+		ret = 0;
+	}else{
+		if(wifi_camera.config.license.lic_auto_gen){
+			ret = sys_get_auto_gen_license(lic);		
+			wifi_camera.config.license.lic_done = 1;
+		}else{
+			ret = sys_port_get_license((void *)lic, (uint32_t)sizeof(struct cProLic));
+		}
+		os_memcpy(&(wifi_camera.config.license.lic), lic, sizeof(struct cProLic));
+		wifi_camera.config.license.lic_done = 1;
+	}
+	if(ret < 0){
+		I4SC_FATAL("Get License Failed\r\n");
+	}else{
+		I4SC_FATAL("OK=>SN:%s!\r\n", lic->sn);
+	}
+	*paysize = sizeof(struct cProLic);
+	return 0;
+}
+
+static int app_deal_set_license(uint8_t *payload, int paysize)
+{
+	if(!payload || !paysize){
+		return -1;
+	}
+	int lic_len = sizeof(struct cProLic);
+	if(paysize != lic_len){
+		I4SC_FATAL("len not match\r\n");
+		return 1;
+	}
+
+	struct cProLic *lic = (struct cProLic *)(payload);
+	
+	os_memcpy(&(wifi_camera.config.license.lic), lic, sizeof(struct cProLic));
+	wifi_camera.config.license.lic_done = 1;
+
+	/*Write License to Flash*/
+	if(sys_port_set_license((void *)lic, (uint32_t)sizeof(struct cProLic)) < 0){
+		I4SC_FATAL("Set License Failed\r\n");
+		return 2;
+	}else{
+		I4SC_FATAL("OK=>SN:%s!\r\n", lic->sn);
+	}
+
+	return 0;
+}
+
+static int app_deal_event_addr(struct sockaddr_in *addr)
+{
+	event_t *evt_ctx = &(wifi_camera.events);
+	
+	if(evt_ctx->wifi_connected == 0){
+		I4SC_FATAL("Force Set OP_WIFI_CONECTED\r\n");
+		i4s_handle_event(OP_WIFI_CONECTED);
+	}
+	os_memcpy(&(evt_ctx->addr), &(addr->sin_addr), sizeof(struct in_addr));
+	evt_ctx->have_addr = 1;
+	
+	return 0;
+}
+
+static int app_deal_get_devinfo(uint8_t *payload, int *paysize,struct sockaddr_in *addr)
+{
+	if(!payload){
+		return 1;
+	}
+
+	struct cProDevInfo *info = (struct cProDevInfo *)(payload);
+	os_memset(info,0,sizeof(struct cProDevInfo));
+	
+	//info->type = DEV_TYPE_BK7231U_V1;
+	info->type = DEV_TYPE_BK7231U_V5;
+	
+	oeminfo_base_t base_info;
+	if(i4s_get_oem_info(&base_info, sizeof(oeminfo_base_t), OEMFLAG_OEM) < 0){
+		os_memcpy(base_info.vendor, OEMINFO_DEFAULT_BASE_VENDOR, sizeof(base_info.vendor));
+		os_memcpy(base_info.product, OEMINFO_DEFAULT_BASE_PRODUCT, sizeof(base_info.product));
+	}
+	os_memcpy(info->vendor, base_info.vendor, CPRO_INFO_SIZE);
+	os_memcpy(info->product, base_info.product, CPRO_INFO_SIZE);
+	os_memcpy(info->version, base_info.version, sizeof(info->version));
+
+	//wifi info
+	if(i4s_set_oem_info_fun_flag==1)
+	{
+		oeminfo_ap_t base_info1;
+		if(!i4s_get_oem_info(&base_info1, sizeof(oeminfo_base_t), OEMFLAG_AP))
+		{
+			os_memcpy(info->ssid, base_info1.ap_prefix, CPRO_INFO_SIZE);
+			os_memcpy(info->mac, mac, sizeof(mac));
+			_set_mac_to_cache(info->mac);
+			
+		}
+		
+	}else
+	{
+	struct cProWifi wifi_info;
+	os_memset(&wifi_info, 0, sizeof(struct cProWifi));
+	sys_port_get_apinfo(&wifi_info);
+	os_memcpy(info->ssid, wifi_info.SSID, CPRO_INFO_SIZE);
+	//mac
+	sys_port_get_mac(info->mac);
+	//I4SC_FATAL("---%s",info->mac);
+	_set_mac_to_cache(info->mac);
+	os_printf("ssid: %s\r\n",info->ssid);
+	}
+	info->gsensor = !!(i4s_get_capacity()&CAMCAP_GSENSOR);
+	info->capacity = i4s_get_capacity();
+	
+	int16_t batterinfo = i4s_handle_event(OP_GETBATTERYINFO);
+	info->battery = (batterinfo&0x7F);
+	info->isCharge = ((batterinfo&0x80) ?1:0);
+	info->isLowPowerOff = ((batterinfo&0x100)?1:0);
+
+	info->haveaudio = 0;//audio_flag
+	info->recordStatusSync = 0;//recoder_flag;
+	if(common_callback){		
+		struct cProComCtr comCtr;
+		uint16_t comLen = sizeof(struct cProComCtr);
+		os_memset(&comCtr, 0, comLen);
+		comCtr.item = CAMCAP_MODE;
+		comCtr.type = OP_GET;
+		common_callback((uint8_t *)&comCtr, &comLen);
+		info->workMode = (comCtr.value&0xFF);
+		I4SC_PRT("Work Mode:%d\r\n", comCtr.value);
+		//get motor on off status		
+		os_memset(&comCtr, 0, comLen);
+		comCtr.item = CAMCAP_MOTOR;
+		comCtr.type = OP_GET;
+		comCtr.action = OP_BUTTON;
+		common_callback((uint8_t *)&comCtr, &comLen);
+		info->motorOnoff = (comCtr.value&0xFF);
+		I4SC_PRT("Motor Status:%d\r\n", comCtr.value);			
+	}
+#ifdef I4S_SUPPORT_MULTI_USER
+		info->usedbyotherapp = !(i4s_find_client_by_ip(addr));
+		I4SC_PRT("ip:%x %d\r\n", addr->sin_addr.s_addr, info->usedbyotherapp);			
+#endif
+	*paysize = sizeof(struct cProDevInfo);
+	
+	return 0;
+}
+
+static int app_deal_open_video(int sockfd, struct sockaddr_in *addr, uint8_t *payload, uint8_t force_grab)
+{
+	uint16_t port = 0;
+	struct jpg_device *jpeg_dev;
+	
+	if(!addr){
+		return 1;
+	}
+	#ifdef I4S_SUPPORT_MULTI_USER
+	uint16_t *p_port = (uint16_t*)payload;
+
+	if(i4s_multi_client_open_video(addr, p_port, force_grab)){
+		I4SC_FATAL("client %d active\r\n", active_client);
+		return 0;
+	}
+#endif
+	static int open_flag  = 1;
+	if(open_flag == 0)
+		open_flag = 0;
+	else
+	{
+		//app_deal_close_video();
+		if(i4s_camera_offline_check() == 0)
+		{
+			_i4s_video_close();	
+		}
+		
+		//delay_ms(1000);
+	}
+
+	
+	__disable_irq();
+	wifi_camera.video.connections.sockfd = sockfd;
+	os_memcpy(&(wifi_camera.video.connections.addr), addr, sizeof(struct sockaddr_in));
+	if(payload){
+		os_memcpy(&port, payload, sizeof(uint16_t));
+		os_memcpy(&aport, &payload[2], sizeof(uint16_t));
+		wifi_camera.video.connections.addr.sin_port = htons(port);
+	}
+	wifi_camera.video.connections.status = VIDEO_START;
+	__enable_irq();
+	I4SC_FATAL("pic port:%d\r\n", htons(wifi_camera.video.connections.addr.sin_port));	
+
+	if(i4s_camera_offline_check() == 0)
+	{
+		jpg_recfg(0);
+		jpg_start(0);
+		_i4s_video_open();
+		vhstart = 1;
+	}
+
+	//start_jpeg();
+	return 0;
+}
+
+static int app_deal_close_video(void)
+{
+	if(vhstart == 0)
+		return 0;
+		
+//	stop_jpeg();
+//	struct jpg_device *jpeg_dev;
+//
+//	jpeg_dev = (struct jpg_device *)dev_get(HG_JPG0_DEVID);	
+//	//jpg_close(jpeg_dev);
+//	//dvp_close(dvp_test);
+
+	_i4s_video_close();	
+
+	//jpg_stop(0);
+	wifi_camera.video.connections.status = VIDEO_STOP;
+	vhstart = 0;
+	os_sleep_ms(30);
+	
+//	return 0;
+}
+static int app_deal_d_open_video(void)
+{
+	
+	if(vhstart == 1){
+		return;
+	}
+	I4SC_FATAL("app_deal_d_open_video:%d\r\n",1);
+
+	
+	_i4s_video_open();
+//	start_jpeg();
+//	jpg_recfg(0);
+//	jpg_start(HG_JPG0_DEVID);
+
+//  struct jpg_device *jpeg_dev;
+//	jpeg_dev = (struct jpg_device *)dev_get(HG_JPG_DEVID);	
+//	jpg_open(jpeg_dev);
+	//dvp_open(dvp_test);
+	vhstart = 1;
+	return 0;
+}
+
+
+
+
+static int app_deal_control_led(uint8_t *payload, int *paysize)
+{
+	struct cProLed *ledArg = (struct cProLed *)(payload);
+	if(led_callback){
+		I4SC_FATAL("Led control:%d-%d-%d-%d\r\n", ledArg->led, ledArg->opType,
+				ledArg->ledStatus, ledArg->value);
+		return led_callback(ledArg);
+	}
+	I4SC_FATAL("led callback empty\r\n");
+	return 3;
+}
+
+static int app_deal_common_control(uint8_t *payload, uint16_t *paysize)
+{
+	if(common_callback){
+		I4SC_FATAL("common callback paysize:%d\r\n", *paysize);
+		return common_callback(payload, paysize);
+	}
+	I4SC_FATAL("common callback empty\r\n");
+	return 3;
+}
+
+static int app_deal_upgrade(uint16_t cid, uint8_t *payload, int paysize)
+{
+	struct cProBasic *prohdr;
+	int ret;
+	//I4SC_FATAL("wo jing lai sheng ji le ");
+	if(!payload || !paysize){
+		I4SC_FATAL("parameter error2\r\n");
+		return 0;
+	}
+    prohdr = (struct cProBasic *)payload;
+	if(cid == CPRO_UPDATE_START){
+		uint16_t dsize = FLASH_WR_BUF_MAX;
+		//I4SC_FATAL("111111111121\r\n");
+		os_memcpy(payload+sizeof(struct cProBasic), &dsize, sizeof(uint16_t));
+		i4s_handle_event(OP_FIRM_BEGIN);
+		return  (bkapi_upgrade_init(prohdr->seqNo) < 0 ?1:0);
+	}else if(cid == CPRO_UPDATE_DATA){	
+		//I4SC_FATAL("111111111111111131\r\n");	
+		i4s_handle_event(OP_FIRM_UPGRADEING);
+		ret = bkapi_upgrade_data(prohdr->seqNo, payload+sizeof(struct cProBasic), paysize-sizeof(struct cProBasic));
+		return (ret < 0 ?-ret:0);
+	}else if(cid == CPRO_UPDATE_END){	
+		I4SC_FATAL("OTA updata finish12!!\r\n");
+		updata_finish=1;	
+		i4s_handle_event(OP_FIRM_UPGRADEOK);
+	}
+
+	return 0;
+}
+
+static int app_deal_nak_handle(uint8_t *payload, int paysize)
+{
+	if(!payload || !paysize){
+		return 0;
+	}
+	
+	I4SC_FATAL("Not support NAK\r\n");
+	return 3;
+}
+
+static int app_recoder_status_set(uint8_t *payload, int paysize)
+{
+	if(!payload || !paysize){
+		return 0;
+	}
+	uint8_t recoder_status = *payload;
+	recoder_flag = recoder_status;
+	I4SC_FATAL("recoder_status = %d recoder_status = %d\r\n",payload,recoder_status);
+	if(recoder_callback)
+		recoder_callback(recoder_status);
+	return 0;
+
+
+}
+
+
+static int i4s_cmd_protocol_handle(int sock, uint8_t *buffer, int buf_size)
+{
+	int rev_len, snd_len;
+	uint16_t tmp_len;
+	socklen_t addr_len;
+	struct sockaddr_in cli_addr;
+	struct cProBasic *prohdr;
+	op_sock=sock;
+
+	if(sock == -1){
+		I4SC_FATAL("parameter error\r\n");
+		return 0;
+	}
+	
+	addr_len = sizeof(struct sockaddr);
+	rev_len = recvfrom(sock, buffer, buf_size, 0, (struct sockaddr *)&cli_addr, &addr_len);
+	if(rev_len <= 0){
+		I4SC_FATAL("recv failed\r\n");
+		return 0;
+	}
+	/* I4SC_FATAL("recv=%d cli_addr=0x%x port=%d addr_len=%d\r\n", 
+		rev_len, cli_addr.sin_addr.s_addr, cli_addr.sin_port, addr_len); */
+
+	prohdr = (struct cProBasic *)buffer;
+	if(prohdr->head != CPRO_BASIC_MAGIC){
+		I4SC_FATAL("bad magic\r\n");
+		return 0;
+	}
+	I4SC_FATAL("PROTO:SEQ:%d CMD->ID:%d AckNeed:%d reFlag:%d CMDLEN:%d RECVLEN:%d\r\n",
+			prohdr->seqNo, prohdr->cid, prohdr->ackNeed , prohdr->reFlag , prohdr->len, rev_len);
+#ifdef I4S_SUPPORT_MULTI_USER
+		i4s_get_location_by_ip(&cli_addr);
+#endif
+
+	switch(prohdr->cid){
+		//è®¾ç½®licenseï¼æ licenseè®¾å¤ä¸è½ç?
+		case CPRO_LIC_SET:
+			prohdr->reFlag = app_deal_set_license(buffer+CPRO_HDR_SZIE, rev_len-CPRO_HDR_SZIE);
+			prohdr->len = 0;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;
+		//è·ålincense
+		case CPRO_LIC_GET:
+			prohdr->reFlag = app_deal_get_license(buffer+CPRO_HDR_SZIE, &rev_len);
+			prohdr->len = rev_len;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;			
+		case CPRO_DEVINFO_GET:	
+		I4SC_FATAL("*******************************************\r\n");	
+		    /*  oeminfo_base_t oemap1;
+            os_memcpy(oemap1.vendor,"YIPINCHENG11",sizeof(oemap1.vendor));
+            os_memcpy(oemap1.product,"ICB-4U01-X6-L12",sizeof(oemap1.product));
+            os_memcpy(oemap1.version,"3.000.008",sizeof(oemap1.version));
+			I4SC_FATAL("-----%s",oemap1.vendor);
+			I4SC_FATAL("-----%s",oemap1.product);
+			I4SC_FATAL("-----%s",oemap1.version);
+            i4s_set_oem_info(&(oemap1),OEMFLAG_OEM);	 */
+			prohdr->reFlag = app_deal_get_devinfo(buffer+CPRO_HDR_SZIE, &rev_len, &cli_addr);
+			prohdr->len = rev_len;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			app_deal_event_addr(&cli_addr);
+			break;
+			//ä¸é¢ä¸ä¸ªæ¯OTAç? CPRO_UPDATE_START: CPRO_UPDATE_DATA: CPRO_UPDATE_END:
+		case CPRO_UPDATE_START:
+		case CPRO_UPDATE_DATA:
+		case CPRO_UPDATE_END:
+			prohdr->reFlag = app_deal_upgrade(prohdr->cid, buffer, rev_len);
+			if(prohdr->cid == CPRO_UPDATE_START){
+				prohdr->len = sizeof(uint16_t);
+			}else{
+				prohdr->len = 0;
+			}
+			snd_len = prohdr->len + CPRO_HDR_SZIE;		
+			break;
+			//LEDæ§å¶
+		case CPRO_LED_CONTROL:
+			prohdr->reFlag = app_deal_control_led(buffer+CPRO_HDR_SZIE, &rev_len);
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;
+		case CPRO_NAK_HANDLE:
+			prohdr->reFlag = app_deal_nak_handle(buffer+CPRO_HDR_SZIE, rev_len-CPRO_HDR_SZIE);
+			snd_len = CPRO_HDR_SZIE;
+			prohdr->len = 0;
+			break;
+			//å½ä»¤çåè®?
+		case CPRO_COMMON_CONTROL:
+			tmp_len = prohdr->len;
+			prohdr->reFlag = app_deal_common_control(buffer+CPRO_HDR_SZIE, &tmp_len);
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;	
+		case CPRO_RECORD_STATUS_SYNC:
+			tmp_len = prohdr->len;
+			prohdr->reFlag = app_recoder_status_set(buffer+CPRO_HDR_SZIE, &tmp_len);
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;
+		default:
+			I4SC_FATAL("Unsupport CMD->ID:%d CMDLEN:%d\r\n", prohdr->cid, prohdr->len);
+			prohdr->reFlag = CPRO_NOSUCHPRO;
+			snd_len = rev_len;
+	};
+	
+	return sendto(sock, buffer, snd_len, 0, (struct sockaddr *)&cli_addr, addr_len);
+}
+
+static int i4s_pic_protocol_handle(int sock, uint8_t *buffer, int buf_size)
+{
+	//ä»¥ä¸æ¯æåå¤´çåè®?
+	int rev_len, snd_len;
+	socklen_t addr_len;
+	struct sockaddr_in cli_addr;
+	struct cProBasic *prohdr;
+
+	if(sock == -1){
+		I4SC_FATAL("parameter error\r\n");
+		return 0;
+	}
+	
+	addr_len = sizeof(struct sockaddr);
+	rev_len = recvfrom(sock, buffer, buf_size, 0, (struct sockaddr *)&cli_addr, &addr_len);
+	if(rev_len <= 0){
+		I4SC_FATAL("recv failed\r\n");
+		return 0;
+	}
+
+	prohdr = (struct cProBasic *)buffer;
+	if(prohdr->head != CPRO_BASIC_MAGIC){
+		I4SC_FATAL("bad magic\r\n");
+		return 0;
+	}
+	I4SC_FATAL("PIC:SEQ:%d CMD->ID:%d AckNeed:%d reFlag:%d CMDLEN:%d RECVLEN:%d\r\n",
+			prohdr->seqNo, prohdr->cid, prohdr->ackNeed , prohdr->reFlag , prohdr->len, rev_len);	
+	switch(prohdr->cid){
+		case CPRO_OPEN_VIDEO:
+		case CPRO_OPEN_VIDEO_GRAB:
+			if(wifi_camera.events.have_addr == 0){
+				I4SC_FATAL("Force Set addr!!!\r\n");
+				app_deal_event_addr(&cli_addr);
+			}
+			prohdr->reFlag = app_deal_open_video(sock, &cli_addr, buffer+CPRO_HDR_SZIE, (prohdr->cid == CPRO_OPEN_VIDEO?0:1));
+			prohdr->len = 0;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;
+		case CPRO_CLOSE_VEIDEO:
+	#ifdef I4S_SUPPORT_MULTI_USER
+			i4s_multi_client_close_video(&cli_addr);
+	#endif	
+			prohdr->reFlag = app_deal_close_video();
+			prohdr->len = 0;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			break;
+		case CPRO_NAK_HANDLE:
+			prohdr->reFlag = app_deal_nak_handle(buffer+CPRO_HDR_SZIE, rev_len);
+			snd_len = CPRO_HDR_SZIE;
+			prohdr->len = 0;
+			break;			
+		default:
+			I4SC_FATAL("Unsupport CMD->ID:%d CMDLEN:%d\r\n", prohdr->cid, prohdr->len);
+			prohdr->reFlag = CPRO_NOSUCHPRO;
+			snd_len = rev_len;
+	}
+	
+	return sendto(sock, buffer, snd_len, 0, (struct sockaddr *)&cli_addr, addr_len);
+}
+
+static void _proto_task(void *arg)
+{
+	proto_t	*pctxd = (proto_t*)arg;
+    fd_set rdset;
+    struct timeval tv = {0, 200000};
+	int ret, maxfd;
+
+	if(!pctxd){
+		I4SC_FATAL("protoCtx_task null\r\n");
+		return;
+	}
+	while(WIFI_RUN_STATUS == TASK_RUN){ 
+        FD_ZERO(&rdset);
+        FD_SET(pctxd->cmd_sockfd, &rdset);	
+        FD_SET(pctxd->pic_sockfd, &rdset);
+		tv.tv_sec = 0;
+		tv.tv_usec = 200000; /*200ms*/
+		maxfd = max(pctxd->cmd_sockfd, pctxd->pic_sockfd);
+		
+        ret = select(maxfd+1, &rdset, NULL, NULL, &tv);
+        if (ret < 0) {
+			I4SC_FATAL("select failed:%d\r\n", ret);
+            break;
+        }else if(ret == 0) {
+			continue;
+        }
+		app_deal_d_open_video();
+		if(FD_ISSET(pctxd->cmd_sockfd, &rdset)){
+			/*handle request*/
+			i4s_cmd_protocol_handle(pctxd->cmd_sockfd, pctxd->buffer, sizeof(pctxd->buffer));
+			if(updata_finish==1){
+				I4SC_FATAL("enter reboot1\r\n");
+				os_sleep_ms(500);
+				mcu_reset();				
+				I4SC_FATAL("enter reboot2\r\n");
+			}
+			I4SC_FATAL(" i4s_cmd_protocol_handle:%d\r\n", ret);
+		}
+		if(FD_ISSET(pctxd->pic_sockfd, &rdset)){
+			/*handle request*/
+			i4s_pic_protocol_handle(pctxd->pic_sockfd, pctxd->buffer, sizeof(pctxd->buffer));
+			I4SC_FATAL(" i4s_pic_protocol_handle:%d\r\n", ret);
+		}
+	}
+
+	I4SC_PRT("protoCtx Task Quit\r\n");	
+}
+
+int bkapi_upgrade_init(uint16_t seq_num)
+{
+	uint32 status;
+
+	if(bkUpgrade.have_init == 1){
+		os_printf("upgrade have init!!! something wrong\r\n");
+		if(bkUpgrade.seqno_init != seq_num){
+			os_printf("new seqno:%d/%d upgrade init\r\n", bkUpgrade.seqno_init, seq_num);
+			//bkapi_upgrade_end();
+		}
+	}
+	bkUpgrade.wr_buf = NULL;
+	bkUpgrade.wr_tmp_buf = NULL;
+
+	/* if(!bkUpgrade.wr_buf){
+		bkUpgrade.wr_buf = os_malloc(FLASH_WR_BUF_MAX * sizeof(char));
+		if(!bkUpgrade.wr_buf){
+			os_printf("wr_buf malloc err\r\n");
+			return -1;
+		}
+	} */
+
+	/* if(!bkUpgrade.wr_tmp_buf){
+		bkUpgrade.wr_tmp_buf = os_malloc(FLASH_WR_BUF_MAX * sizeof(char));
+		if(!bkUpgrade.wr_tmp_buf){
+			os_printf("wr_tmp_buf malloc err\r\n");			
+			os_free(bkUpgrade.wr_buf);
+			return -1;
+		}
+	} */
+
+	//bkUpgrade.flash_hdl = ddev_open(FLASH_DEV_NAME, &status, 0);
+	/* if(DD_HANDLE_UNVALID == bkUpgrade.flash_hdl){		
+		os_printf("flash open err\r\n");
+		os_free(bkUpgrade.wr_buf);		
+		os_free(bkUpgrade.wr_tmp_buf);
+		return -1;
+	} */
+	bkUpgrade.wr_last_len = 0;
+	//bk_logic_partition_t *pt = bk_flash_get_info(BK_PARTITION_OTA_DL_PART);  
+	/* if(pt == NULL){
+		os_printf("No OTA_DL_PART in flash\r\n");
+		os_free(bkUpgrade.wr_buf);		
+		os_free(bkUpgrade.wr_tmp_buf);
+		ddev_close(bkUpgrade.flash_hdl);
+		return -1;
+	}else{
+		bkUpgrade.flash_address = pt->partition_start_addr;
+		bkUpgrade.flash_len = pt->partition_length;
+	} */
+
+	//flash_protection_op(FLASH_XTX_16M_SR_WRITE_ENABLE, FLASH_PROTECT_NONE);
+	bkUpgrade.seqno_init = seq_num;
+	bkUpgrade.seqno_data = 0;
+	bkUpgrade.upgrade_ok = 0;
+	bkUpgrade.have_init = 1;
+	
+	return 0;
+}
+
+
+
+
+
+
+static void _proto_uninit(proto_t	*pctxd)
+{
+	if(!pctxd){
+		return ;
+	}
+
+	close(pctxd->cmd_sockfd);
+	close(pctxd->pic_sockfd);	
+
+	
+	csi_kernel_task_del(pctxd->thread);
+	os_memset(pctxd, 0, sizeof(proto_t));
+	
+	I4SC_PRT("protoCtx Quit\r\n");
+}
+proto_t	* audio_pctxd;
+
+static int _proto_init(proto_t	*pctxd, uint16_t port)
+{
+	int ret;
+	struct sockaddr_in addr;
+
+	if(!pctxd){
+		return 0;
+	}
+	os_memset(pctxd, 0, sizeof(proto_t));
+	pctxd->port = port;
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(pctxd->port);
+	/*init cmd socket*/
+    pctxd->cmd_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (pctxd->cmd_sockfd  == -1) {
+		I4SC_PRT("create cmd udp failed\r\n");
+		goto EXIT;
+	}
+	I4SC_PRT("csock:%d\r\n", pctxd->cmd_sockfd);
+	/*bind socket*/
+    ret = bind(pctxd->cmd_sockfd, (struct sockaddr *)&addr, sizeof (struct sockaddr));
+	if(ret){
+		I4SC_PRT("bind udp failed\r\n");
+		goto EXIT;
+	}
+	//create picture sockfd
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(pctxd->port+1);
+	/*init cmd socket*/
+    pctxd->pic_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (pctxd->pic_sockfd  == -1) {
+		I4SC_PRT("create pic udp failed\r\n");
+		goto EXIT;
+	}
+	
+	I4SC_PRT("psock:%d\r\n", pctxd->pic_sockfd);
+	/*bind socket*/
+    ret = bind(pctxd->pic_sockfd, (struct sockaddr *)&addr, sizeof (struct sockaddr));
+	if(ret){
+		I4SC_PRT("bind pic udp failed\r\n");
+		goto EXIT;
+	}	
+	csi_kernel_task_new((k_task_entry_t)_proto_task, "protoCtx", pctxd, 9, 0, NULL, 2048, &(pctxd->thread));
+	
+	//h_init();
+
+
+	I4SC_PRT("protoCtx OK!\r\n");
+	return 0;
+
+EXIT:
+	I4SC_PRT("protoCtx quit!\r\n");
+	/*close socket*/
+	if(pctxd->cmd_sockfd){
+		close(pctxd->cmd_sockfd);
+		pctxd->cmd_sockfd = 0;
+	}
+	if(pctxd->pic_sockfd){
+		close(pctxd->pic_sockfd);
+		pctxd->pic_sockfd = 0;
+	}
+
+	return -1;
+}
+
+int bkapi_upgrade_data(uint16_t seq_num, char *page, uint32 len)
+{
+    struct firmwareHeader *fhead = NULL;
+	char *pay = NULL; 
+	uint32 paylen;
+	//char md5str[33] = {0};
+	int res=0;
+
+	if(!page || !len){
+		return 0;
+	}
+	if(bkUpgrade.have_init == 0){
+		return -1;
+	}
+	fhead = &(bkUpgrade.fw_header);
+	pay = page;
+	paylen = len;
+	
+	if((seq_num == (bkUpgrade.seqno_init+1))&&(flag==0)){
+		if(flag==1)
+		{
+			return 0;
+		}
+		flag=1;
+		os_printf("first upgrade data:%d\r\n", seq_num);
+		bkUpgrade.seqno_data = seq_num;
+		//init firmware struct
+		if(len < sizeof(struct firmwareHeader)){
+			os_printf("upgrade head wrong:%d\r\n", len);
+			return -2;
+		}
+		os_memcpy(fhead, page, sizeof(struct firmwareHeader));
+		if(fhead->magic != 0x66778899){
+			os_printf("firmare invaild[0x%x]\r\n", fhead->magic);
+			return -3;
+		}
+		os_printf("11---====----===--==-=-=");
+		pay += sizeof(struct firmwareHeader);
+		paylen -= sizeof(struct firmwareHeader);
+	}else if(seq_num != (bkUpgrade.seqno_data+1)){
+		//return successl just send ack to peer  may be disorder
+		os_printf("data seq wrong:%d/%d\r\n", seq_num, bkUpgrade.seqno_data);
+		return 0;
+	}
+	if(paylen > FLASH_WR_BUF_MAX){
+		os_printf("data too big:%d\r\n", len);
+		return -4;
+	}
+	    
+	 if(bkUpgrade.rcv_size + paylen == fhead->size){
+		os_printf("firmware last part receive\r\n");
+		if(libota_write_fw(fhead->size,offset,pay,paylen)){
+			os_printf("firmware last write failed\r\n");
+			return -5;
+		}	
+		os_printf("firmware wirte finish  check it\r\n");
+		/* if(bkapi_upgrade_data_check(fhead->size, md5str) < 0){
+			os_printf("firmware md5 calute failed\r\n");
+			return -6;
+		} */
+		/* if(os_memcmp(fhead->md5, md5str, sizeof(fhead->md5)) != 0){
+			os_printf("MD5 Not Same:[%s/%s]\r\n", fhead->md5, md5str);
+			return -7;
+		}else{
+			os_printf("MD5 OK:[%s]\r\n", md5str);
+			bkUpgrade.upgrade_ok = 1;
+		} */
+		return 0;
+	}else if(bkUpgrade.rcv_size + paylen > fhead->size){
+		os_printf("firmware size attack:[%d/%d]\r\n", bkUpgrade.rcv_size + paylen, fhead->size);
+		return -8;
+	}else{
+		res = libota_write_fw(fhead->size,offset,pay,paylen);
+		if(res){
+			os_printf("libota_write_fw is error is %d!!!",res);
+			return -5;
+		}else
+		{
+			bkUpgrade.rcv_size += paylen;
+			bkUpgrade.seqno_data = seq_num;
+			offset += paylen;
+            
+			os_printf("firmware wirte successful[%d:%d/%d]\r\n", 
+			bkUpgrade.seqno_data, bkUpgrade.rcv_size, bkUpgrade.fw_header.size);//
+			/* 
+			int i = 0;
+
+			while(1)
+			{
+				
+				os_printf("%x ",pay[i]);
+				if(i==(paylen-1))
+				{
+					break;
+				}
+				i++;
+			} */
+    		
+		}
+	}
+	/* bkUpgrade.rcv_size += paylen;
+	bkUpgrade.seqno_data = seq_num;
+	offset += paylen;
+
+    os_printf("offset 8888 is %d",offset);
+	os_printf("firmware wirte successful[%d:%d/%d]\r\n", 
+			bkUpgrade.seqno_data, bkUpgrade.rcv_size, bkUpgrade.fw_header.size); */
+
+	return 0; 
+}
+
+
+
+
+
+
+static int i4s_sendto(int sockfd, const void *data, size_t size, uint8_t flags,
+       const struct sockaddr *to, socklen_t tolen)
+{
+	if(flags == 0){
+		return sendto(sockfd, data, size, 0, to, tolen);
+	}
+	struct cProBasic prohdr, *reshdr;
+	int8_t trynum = 0;
+    fd_set rdset;
+    struct timeval tv = {0, 100000};
+	int ret;
+	uint8_t request[256] = {0};
+	socklen_t addr_len;
+	struct sockaddr_in cli_addr;
+
+	os_memcpy(&prohdr, data, CPRO_HDR_SZIE);
+	for(trynum = 0; trynum < 3; trynum++){
+		if(sendto(sockfd, data, size, 0, to, tolen) != size){
+			I4SC_PRT("i4s sendto failed\r\n");
+			return -1;
+		}
+		FD_ZERO(&rdset);
+		FD_SET(sockfd, &rdset);	
+		tv.tv_sec = 0;
+		tv.tv_usec = 100000; /*100ms*/
+        ret = select(sockfd+1, &rdset, NULL, NULL, &tv);
+		if(ret <= 0) {
+			continue;
+        }
+		addr_len = sizeof(struct sockaddr);
+		if(recvfrom(sockfd, request, 256, 0, 
+				(struct sockaddr *)&cli_addr, &addr_len) <=0){
+			continue;
+		}
+		reshdr = (struct cProBasic*)request;
+		if(prohdr.cid == reshdr->cid && prohdr.seqNo == reshdr->seqNo){
+			I4SC_PRT("i4s sendto ok\r\n");
+			return size;	
+		}
+	}
+
+	return 0;	
+}
+
+static uint8_t sensor_is_ok(void)
+{
+	return 1;
+}
+static int keepalive_notify(event_t *pctxd, uint8_t ack)
+{
+	uint8_t response[128] = {0}, tmac[6] = {0};	
+	struct sockaddr_in addr;	
+	struct cProBasic *prohdr = (struct cProBasic *)response;
+	struct eventSetEar *evtset = (struct eventSetEar *)(response+CPRO_HDR_SZIE);
+	uint8_t status;
+
+	//event type version
+	//evtset->type = EVT_TYPE_EAR;
+	evtset->type = EVT_TYPE_EAR_V2;
+
+	if(pctxd->wifi_connected == 0 || pctxd->have_addr == 0){
+		I4SC_PRT("notify local[%d/%d]!\r\n", pctxd->wifi_connected, pctxd->have_addr);
+		return 0;
+	}
+	//sensor status
+	evtset->isSensorOk = sensor_is_ok();
+	
+	prohdr->cid = CPRO_EVENT_NOTIFY;
+	prohdr->head = CPRO_BASIC_MAGIC;
+	prohdr->len = sizeof(struct eventSetEar);
+	prohdr->ackNeed = ack;
+	prohdr->seqNo = lseqNo++;
+	prohdr->reFlag = 0;
+
+	int16_t batterinfo = i4s_handle_event(OP_GETBATTERYINFO);
+	evtset->battery = (batterinfo&0x7F);
+	evtset->isCharge = ((batterinfo&0x80) ?1:0);
+	evtset->isLowPowerOff = ((batterinfo&0x100)?1:0);
+	status = (uint8_t)i4s_handle_event(OP_GET_PIC_VIDEO_BUTTON);
+	evtset->picbutton = ((status >> 4) & 0xf);
+	evtset->videobutton = (status & 0xf);
+	
+	status = (uint8_t)i4s_handle_event(OP_GET_ZOOM_STA);
+	evtset->zoomup = ((status >> 4) & 0xf);
+	evtset->zoomdown = (status & 0xf);
+
+	evtset->frozen = (i4s_handle_event(OP_GET_BUTTON_FROZEN) & 0xf);
+	evtset->mirror = (i4s_handle_event(OP_GET_BUTTON_MIRROR) & 0xf);
+	I4SC_PRT("C:%d P:%d V:%d U:%d D:%d F:%d M:%d\r\n", evtset->isCharge, evtset->picbutton, evtset->videobutton,
+			evtset->zoomup, evtset->zoomdown, evtset->frozen, evtset->mirror);
+	_get_mac_from_cache(tmac);
+	evtset->mac[0] = tmac[4];
+	evtset->mac[1] = tmac[5];
+
+	if(common_callback){		
+		struct cProComCtr comCtr;
+		uint16_t comLen = sizeof(struct cProComCtr);
+		os_memset(&comCtr, 0, comLen);
+		comCtr.item = CAMCAP_MODE;
+		comCtr.type = OP_GET;
+		common_callback((uint8_t *)&comCtr, &comLen);
+		evtset->workMode = (comCtr.value&0xFF);
+		I4SC_PRT("Work Mode K:%d\r\n", comCtr.value);
+
+		//get motor on off status		
+		os_memset(&comCtr, 0, comLen);
+		comCtr.item = CAMCAP_MOTOR;
+		comCtr.type = OP_GET;	
+		comCtr.action = OP_BUTTON;
+		common_callback((uint8_t *)&comCtr, &comLen);
+		evtset->motorOnOff = (comCtr.value&0xFF);
+		I4SC_PRT("Motor Status:%d\r\n", comCtr.value);	
+	}
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(pctxd->port);	
+#ifdef I4S_SUPPORT_MULTI_USER
+		addr.sin_addr = clients[active_client].addr;
+#else
+	addr.sin_addr = pctxd->addr;
+#endif
+	return i4s_sendto(pctxd->sockfd, (void *)response, CPRO_HDR_SZIE+prohdr->len,
+		ack, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+}
+
+static void _event_task(void* arg)
+{
+	event_t *pctxd = (event_t*)arg;
+	int sleep_cnt = 0;
+
+	if(pctxd == NULL){
+		return;
+	}
+     
+	while(WIFI_RUN_STATUS == TASK_RUN){
+		/*notify peers*/
+		if((sleep_cnt++) %100 == 0 || notify_force){
+			keepalive_notify(pctxd, 0);
+			if(notify_force){
+				I4SC_PRT("Force refresh\r\n");
+				notify_force = 0;
+			}
+		}
+		os_sleep_ms(10);
+	}
+
+	/*deinit resource*/
+	close(pctxd->sockfd);
+	I4SC_PRT("eventCtx Task Quit\r\n");
+}
+
+static void _event_uninit(event_t *pctxd)
+{
+	csi_kernel_task_del(pctxd->thread);
+	os_memset(pctxd, 0, sizeof(event_t));
+	I4SC_PRT("eventCtx Quit\r\n");
+}
+
+static int _event_init(event_t	*pctxd, uint16_t port)
+{
+	if(pctxd == NULL){
+		return -1;
+	}
+	
+	os_memset(pctxd, 0, sizeof(event_t));
+	pctxd->port = port;
+	/*init cmd socket*/
+    pctxd->sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (pctxd->sockfd  == -1) {
+		I4SC_PRT("create event sock failed\r\n");
+		return -2;
+	}
+
+	/*start thread*/
+	csi_kernel_task_new((k_task_entry_t)_event_task, "eventCtx", pctxd, 9, 0, NULL, 1024, &(pctxd->thread));
+
+	I4SC_PRT("eventCtx OK!\r\n");
+	return 0;
+}
+
+void video_add_pkt_header(TV_HDR_PARAM_PTR param)
+{
+	struct hVideoUDP* elem_tvhdr = (struct hVideoUDP*)(param->ptk_ptr);
+	uint8_t tmac[6] = {0};
+	static uint8_t tseq = 0;
+
+	elem_tvhdr->type = VIDEO_TYPE_V1;
+	elem_tvhdr->frameId= param->frame_id;
+	elem_tvhdr->isEof = param->is_eof;
+	elem_tvhdr->frameCnt = param->frame_cnt;
+	elem_tvhdr->seq = tseq++;
+	//chengjiegai-åæ¬æ?2ä¸?!!,ä¸ç¥éæå¥Bugä¸?
+	elem_tvhdr->gsensorSupport = !!(i4s_get_capacity()&CAMCAP_GSENSOR);
+	elem_tvhdr->gsensorData = gSensor;
+	
+	elem_tvhdr->focusData = (i4s_handle_event(OP_GET_FOCUS_DATA) & 0x03);
+	elem_tvhdr->reservedData = 0;	
+
+	if((i4s_get_capacity()&CAMCAP_TEM_HUM_SENSOR) &&
+		(elem_tvhdr->gsensorSupport == 0 || tseq %2 == 1)){
+		elem_tvhdr->gsensorDataType = 1;
+		elem_tvhdr->gsensorData = i4s_handle_event(OP_GET_TH_SENSOR_DATA);
+	}else{
+		elem_tvhdr->gsensorDataType = 0;
+	}
+	//elem_tvhdr->gsensorData = 17;
+	elem_tvhdr->wide = 640;
+	elem_tvhdr->high = 480;
+	
+	_get_mac_from_cache(tmac);
+	elem_tvhdr->mac[0] = tmac[4];
+	elem_tvhdr->mac[1] = tmac[5];
+}
+
+static void _video_uninit(video_t* pctxd)
+{
+	if(!pctxd){
+		return;
+	}
+
+	csi_kernel_task_del(pctxd->thread);
+	os_memset(pctxd, 0, sizeof(video_t));	
+	I4SC_PRT("videoCtx Quit\r\n");
+}
+
+int setudpClose(){
+        wifi_camera.video.connections.status = VIDEO_STOP;
+        if(usr_p){
+                return -1;
+        }
+        return 0;
+}
+
+void *test_buf = NULL;
+#define NEW_TEST_FLAG 1
+
+static int audio_opcode_func(stream *s,void *priv,int opcode)
+{
+	int res = 0;
+	//_os_printf("%s:%d\topcode:%d\n",__FUNCTION__,__LINE__,opcode);
+	switch(opcode)
+	{
+		case STREAM_OPEN_ENTER:
+		break;
+		case STREAM_OPEN_EXIT:
+		{
+            enable_stream(s,1);
+		}
+		break;
+		case STREAM_OPEN_FAIL:
+		break;
+
+
+
+		default:
+			//默认都返回成功
+		break;
+	}
+	return res;
+}
+#if 0
+
+#else
+
+
+static uint8_t frame_mem_id = 0;
+stream *s = NULL;
+stream *audio_s = NULL;
+void _i4s_video_open()
+{
+	//创建接收流
+	s = open_stream(R_RTP_JPEG,0,8,audio_opcode_func,NULL);//_available
+	//音频接收流
+	#if AUDIO_OPEN
+	audio_s = open_stream_available(R_RTP_AUDIO,0,8,audio_opcode_func,NULL);
+	#endif
+	start_jpeg();
+}
+void _i4s_video_close()
+{
+	//关闭流
+	close_stream(s);
+	//关闭音频流
+#if AUDIO_OPEN
+	close_stream(audio_s);
+#endif
+
+}
+#ifdef I4S_PSRAM_HEAP//PSRAM_HEAP
+#define I4S_PSRAM_BUF_LEN		JPG_BUF_LEN //
+static uint8_t jpeg_buf[JPG_BUF_LEN+24];
+
+static void _video_task(void* arg)
+{
+	video_t *pctxd = (video_t*)arg;
+
+	//stream *s = NULL;
+	struct data_structure *get_f = NULL;
+	void *fp = NULL;
+	//i4s
+	TV_HDR_PARAM_ST jpg_header; 
+	int timeouts = 0;
+	int head_size = sizeof(struct hVideoUDP);
+#ifdef I4S_SUPPORT_MULTI_USER	
+	struct sockaddr_in m_addr;	
+#endif
+	//启动jpeg(内部就是创建一个发送流,会绑定R AT_SAVE_PHOTO)
+	start_jpeg();
+	I4SC_PRT("-----------%d\r\n",WIFI_RUN_STATUS);
+	while(WIFI_RUN_STATUS == TASK_RUN){
+		if(pctxd->connections.status != VIDEO_START){
+			os_sleep_ms(20);
+			continue;
+		}
+		if(s)
+        {
+            enable_stream(s,1);
+        }
+		#if AUDIO_OPEN
+		//发送音频
+		struct data_structure *audio_f = NULL;
+		audio_f = recv_real_data(audio_s);
+        if(audio_f)
+        {
+			uint8_t *buf = get_stream_real_data(audio_f);
+			int flen = get_stream_real_data_len(audio_f);
+			int cat_len = 1020;
+			audio_buf_send(buf,cat_len);
+			//os_sleep_ms(1);
+			if((flen-cat_len)>0)
+				audio_buf_send(buf+cat_len,flen-cat_len);
+            free_data(audio_f);
+            
+        }
+
+		#endif
+		//获取图片
+		get_f = recv_real_data(s);
+		if(get_f)
+		{
+			uint8_t *jpeg_buf_addr = NULL;
+			uint32_t total_len = 0;
+			uint32_t uint_len = 0;
+			uint32_t jpg_len = 0;
+			struct stream_jpeg_data_s *el,*tmp;
+			//获职图片数据的节点
+			struct stream_jpeg_data_s *dest_list = (struct stream_jpeg_data_s *)get_stream_real_data(get_f);
+			struct stream_jpeg_data_s *dest_list_tmp = dest_list;
+			//获取图片长度
+			total_len = get_stream_real_data_len(get_f);
+			
+			//获取图片数据一个节点的长度
+			uint_len = (uint32_t)stream_data_custom_cmd_func(get_f,CUSTOM_GET_NODE_LEN,NULL);
+			jpg_len = total_len;
+			int all_have_send = 0;
+			//i4s
+			os_memset(&jpg_header, 0, sizeof(jpg_header));
+			jpg_header.frame_id = frame_mem_id++;
+			if(total_len > uint_len)
+			{
+				int test_len = total_len - uint_len;
+				jpg_header.frame_cnt = uint_len/I4S_PSRAM_BUF_LEN;
+				if(uint_len%I4S_PSRAM_BUF_LEN)
+					jpg_header.frame_cnt++;
+				jpg_header.frame_cnt += test_len/I4S_PSRAM_BUF_LEN;
+				if(test_len%I4S_PSRAM_BUF_LEN)
+					jpg_header.frame_cnt++;
+			}
+			else
+			{
+				jpg_header.frame_cnt = jpg_len/I4S_PSRAM_BUF_LEN;
+				if(jpg_len%I4S_PSRAM_BUF_LEN){
+					jpg_header.frame_cnt++;
+				}
+			}
+			int test_cnt = 0;
+			//遍历图片的节点
+			//LL_FOREACH_SAFE(dest_list,el,tmp)
+			for((el) = (dest_list); (el) && ((tmp) = (el)->next, 1); (el) = (tmp))
+			{
+				if(dest_list_tmp == el)
+				{
+					continue;
+				}
+				#ifdef PSRAM_HEAP1
+				//数据量过大的情况下不发送了
+				if(total_len > 80896)
+					total_len = 0;
+				#endif
+				if(total_len)
+				{
+					//获取节点的buf起始地址
+					jpeg_buf_addr = (uint8_t *)stream_data_custom_cmd_func(get_f,CUSTOM_GET_NODE_BUF,el->data);
+					//uint_len = (uint32_t)stream_data_custom_cmd_func(get_f,CUSTOM_GET_NODE_LEN,el->data);
+					//I4SC_PRT("total_len = %d,uint_len = %d\r\n",total_len,uint_len);
+					//写卡(发送)
+					
+					if(total_len >= uint_len||total_len > 0)
+					{
+						int need_send = 0;
+						if(total_len > uint_len)
+							need_send = uint_len;
+						else
+							need_send = total_len;
+						total_len -= uint_len;
+
+							int have_send = 0;
+							while(have_send < need_send){
+								test_cnt++;
+								jpg_header.ptk_ptr = jpeg_buf;
+								if((need_send - have_send) > (I4S_PSRAM_BUF_LEN))
+									os_memcpy(jpeg_buf+ head_size, jpeg_buf_addr+have_send, I4S_PSRAM_BUF_LEN);
+								else
+									os_memcpy(jpeg_buf+ head_size, jpeg_buf_addr+have_send, need_send - have_send);
+
+								if((need_send - have_send) > (I4S_PSRAM_BUF_LEN)){
+									jpg_header.ptklen = (I4S_PSRAM_BUF_LEN);					
+									jpg_header.is_eof = 0;
+									have_send += (I4S_PSRAM_BUF_LEN);
+								}else{
+									jpg_header.ptklen = need_send - have_send;
+									have_send = need_send;
+									all_have_send += have_send;
+									if(all_have_send >= jpg_len)
+									{
+										jpg_header.is_eof = 1;
+										//I4SC_PRT("jpg_header.frame_cnt = %d test_cnt = %d\r\n",jpg_header.frame_cnt,test_cnt);
+									}
+									else
+										jpg_header.is_eof = 0;
+								}
+								
+								video_add_pkt_header(&jpg_header);
+								jpg_header.ptklen += head_size;
+
+								int send_byte = 0;
+								send_byte = -1;
+								timeouts = 0;
+								while(send_byte < 0){
+							#ifdef I4S_SUPPORT_MULTI_USER
+									m_addr.sin_family = AF_INET;
+									m_addr.sin_port = htons(clients[active_client].img_port);
+									m_addr.sin_addr = clients[active_client].addr;
+								
+									send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
+											(struct sockaddr *)&(m_addr), sizeof(struct sockaddr_in)); 
+							#else
+									send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
+											(struct sockaddr *)&(pctxd->connections.addr), sizeof(struct sockaddr_in)); 
+							#endif
+									timeouts++;
+									//I4SC_PRT("udp send bit:%d\r\n", send_byte);
+									if(timeouts > 14){				
+										I4SC_PRT("udp send err:%d\r\n", timeouts);			
+										break;
+									}
+							
+									if (send_byte <= 0) {
+										/* err */
+										//I4SC_PRT("udp send try:%d,total_len = %d,uint_len = %d\r\n", timeouts,total_len,uint_len);			
+										os_sleep_ms(3);
+									}
+								}
+							}
+							if(total_len > 0 && total_len < uint_len)
+								uint_len = total_len;
+					}
+					else
+					{
+						total_len = 0 ;
+					}
+					
+				}
+				//使用完一个节点,就要删除改节点,快速释放空间
+				stream_data_custom_cmd_func(get_f,CUSTOM_DEL_NODE,el);
+			}
+			//写卡完毕后,释放get_f的节点
+			free_data(get_f);//关闭文件系统句柄
+		}
+	}
+	I4SC_PRT("videoCtx Task Quit\r\n");
+}
+#else
+static void _video_task(void* arg)
+{
+	video_t *pctxd = (video_t*)arg;
+	// uint8_t pos_data[]
+
+	//stream *s = NULL;
+	struct data_structure *get_f = NULL;
+	int raw_sock = -1;
+	uint8_t packet[4096] = {0};
+	void *fp = NULL;
+	//i4s
+	TV_HDR_PARAM_ST jpg_header; 
+	int timeouts = 0;
+	uint8_t *pseudo_packet = NULL;
+	int head_size = sizeof(struct hVideoUDP);
+#ifdef I4S_SUPPORT_MULTI_USER	
+	struct sockaddr_in m_addr;	
+#endif
+	//启动jpeg(内部就是创建一个发送流,会绑定R AT_SAVE_PHOTO)
+	start_jpeg();
+
+	I4SC_PRT("-----------%d\r\n",WIFI_RUN_STATUS);
+	while(WIFI_RUN_STATUS == TASK_RUN){
+		if(pctxd->connections.status != VIDEO_START){
+			os_sleep_ms(20);
+			continue;
+		}
+		if(s)
+        {
+            enable_stream(s,1);
+        }
+		#if AUDIO_OPEN
+		//发送音频
+		struct data_structure *audio_f = NULL;
+		audio_f = recv_real_data(audio_s);
+        if(audio_f)
+        {
+			uint8_t *buf = get_stream_real_data(audio_f);
+			int flen = get_stream_real_data_len(audio_f);
+			int cat_len = 1020;
+			audio_buf_send(buf,cat_len);
+			//os_sleep_ms(1);
+			if((flen-cat_len)>0)
+				audio_buf_send(buf+cat_len,flen-cat_len);
+            free_data(audio_f);
+            
+        }
+
+		#endif
+		//获取图片
+		get_f = recv_real_data(s);
+		
+		/**
+		 * 只有原始套接字才允许 自己定义IP包
+		 */
+		if (raw_sock == -1) {
+			raw_sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP); // 创建原始套接字
+			if (raw_sock == -1) {
+				perror("socket failed");
+				os_sleep_ms(10);
+				continue;
+			}
+		}
+		// 	//设置 IP_HDRINCL 选项
+		// 	int one = 1;
+		// 	if (setsockopt(raw_sock, IPPROTO_IP, LWIP_IP_HDRINCL, &one, sizeof(one)) < 0) {
+		// 		perror("setsockopt failed\r\n");
+		// 		os_sleep_ms(10);
+		// 		continue;
+		// 	}
+		// }
+
+
+		if(get_f)
+		{
+			uint8_t *jpeg_buf_addr = NULL;
+			uint32_t total_len = 0;
+			uint32_t uint_len = 0;
+			uint32_t jpg_len = 0;
+			struct stream_jpeg_data_s *el,*tmp;
+			//获职图片数据的节点
+			struct stream_jpeg_data_s *dest_list = (struct stream_jpeg_data_s *)get_stream_real_data(get_f);
+			struct stream_jpeg_data_s *dest_list_tmp = dest_list;
+			//获取图片长度
+			total_len = get_stream_real_data_len(get_f);
+			
+			//获取图片数据一个节点的长度
+			uint_len = (uint32_t)stream_data_custom_cmd_func(get_f,CUSTOM_GET_NODE_LEN,NULL);
+			jpg_len = total_len;
+			I4SC_PRT("total_len = %d,uint_len = %d\r\n",total_len,uint_len);
+			//i4s
+			os_memset(&jpg_header, 0, sizeof(jpg_header));
+			jpg_header.frame_id = frame_mem_id++;
+			
+			jpg_header.frame_cnt = jpg_len/uint_len;
+			if(jpg_len%uint_len){
+				jpg_header.frame_cnt++;
+			}
+			
+			//遍历图片的节点
+			//LL_FOREACH_SAFE(dest_list,el,tmp)
+			for((el) = (dest_list); (el) && ((tmp) = (el)->next, 1); (el) = (tmp))
+			{
+				memset(packet, 0, sizeof(packet));
+				if(dest_list_tmp == el)
+				{
+					continue;
+				}
+				if(total_len)
+				{
+					//获取节点的buf起始地址
+					jpeg_buf_addr = (uint8_t *)stream_data_custom_cmd_func(get_f,CUSTOM_GET_NODE_BUF,el->data);
+					jpg_header.ptk_ptr = jpeg_buf_addr - head_size;
+					//写卡(发送)
+					if(total_len >= uint_len)
+					{
+						total_len -= uint_len;
+						jpg_header.ptklen = uint_len;
+						jpg_header.is_eof = 0;
+						
+					}
+					else
+					{
+						jpg_header.ptklen = total_len;
+						jpg_header.is_eof = 1;
+						total_len = 0 ;
+					}
+					//四季私有协议发部分开始
+					if(i4s_send_stream_control()) {
+						video_add_pkt_header(&jpg_header);
+						jpg_header.ptklen += head_size;
+						
+						int send_byte = 0;
+						send_byte = -1;
+						timeouts = 0;
+		
+						while(send_byte < 0){
+					#ifdef I4S_SUPPORT_MULTI_USER
+							m_addr.sin_family = AF_INET;
+							m_addr.sin_port = htons(clients[active_client].img_port);
+							printf("picture port is %d\r\n", clients[active_client].img_port);
+							m_addr.sin_addr = clients[active_client].addr;
+
+							//udp本身带有校验和，所以自己只需要加上 魔数就好了
+
+							// 填充 IP 头部
+							// struct ip_header *ip = (struct ip_header *)packet;
+							// ip->iph_ihl = 5;               // IP 头部长度(单位是32位，即4字节)
+							// ip->iph_ver = 4;                // 使用 IPv4
+							// ip->iph_tos = 0x10;                // 服务类型(低延迟)
+							// ip->iph_len = htons(sizeof(struct ip_header) + sizeof(struct udp_header) + jpg_header.ptklen); // IP数据包 总长度 （是包括传输层的数据的）
+							// ip->iph_id = htons(54320);      // ID(标识一个数据包 不分段，所以可以随便设置) // XXX 错误了 （不需要发IP，但是接受的时候需要有IP）
+							// ip->iph_offset = 0;             // 偏移量（不分段）
+							// ip->iph_ttl = 64;               // TTL(最大跳转路由数)
+							// ip->iph_protocol = IPPROTO_UDP;  // 协议类型 UDP
+							// ip->iph_saddr = inet_addr(OEMINFO_DEFAULT_NET_IP); // 源 IP
+							// ip->iph_daddr = m_addr.sin_addr.s_addr; // 目标 IP
+							// ip->iph_checksum = 0;
+							
+
+							// 地址 https://docs.pingcode.com/baike/1281537
+
+							// 填充 UDP 头部
+							// struct udp_header *udp = (struct udp_header *)(packet + sizeof(struct ip_header));
+							struct udp_header *udp = (struct udp_header *)(packet);
+							udp->udp_sport = htons(OEMINFO_DEFAULT_BASE_PORT + 1);  // 源端口
+							udp->udp_dport = htons(clients[active_client].img_port);  // 目标端口
+							udp->udp_len = htons(sizeof(struct udp_header) + jpg_header.ptklen);  // UDP 数据包长度
+							udp->udp_checksum = 0; // 初始值 0，稍后计算 (伪头部、UDP头部、数据部分)
+
+
+							// 伪头部结构 （ 只为计算校验和 ） 
+							struct pseudo_header psh;
+							psh.source_address = inet_addr(OEMINFO_DEFAULT_NET_IP);
+							psh.dest_address = m_addr.sin_addr.s_addr;
+							psh.placeholder = 0; // 占位符
+							psh.protocol = IPPROTO_UDP;
+							psh.udp_length = htons(sizeof(struct udp_header) + jpg_header.ptklen); // UDP 头 + 数据
+
+							int psize = sizeof(struct pseudo_header) + sizeof(struct udp_header) + jpg_header.ptklen;
+
+							// 先填充数据
+							// uint8_t *data = packet + sizeof(struct ip_header) + sizeof(struct udp_header); // 往后挪，移出位置写数据
+							uint8_t *data = packet + sizeof(struct udp_header);
+							memcpy(data, jpg_header.ptk_ptr, jpg_header.ptklen);
+
+							// TODO 检验一下数据内容是不是在数据内容的位置上？
+							// printf("jpg_header.ptk_ptr[0] = %02x, jpg_header.ptk_ptr[1] = %02x, jpg_header.ptk_ptr[2] = %02x, jpg_header.ptk_ptr[3] = %02x", jpg_header.ptk_ptr[0], jpg_header.ptk_ptr[1], jpg_header.ptk_ptr[2], jpg_header.ptk_ptr[3]);
+
+							pseudo_packet = malloc(psize);
+							if (pseudo_packet == NULL) {
+								printf("Memory allocation failed\n");
+								continue;
+							}
+							memcpy(pseudo_packet, (uint8_t *)&psh, sizeof(struct pseudo_header));
+							memcpy(pseudo_packet + sizeof(struct pseudo_header), udp, sizeof(struct udp_header));
+							memcpy(pseudo_packet + sizeof(struct pseudo_header) + sizeof(struct udp_header), jpg_header.ptk_ptr, jpg_header.ptklen);
+
+							// 计算 UDP 校验和
+							udp->udp_checksum = checksum(pseudo_packet, psize);
+							// ip->iph_checksum = checksum((uint8_t *)packet, sizeof(struct ip_header)); // IP 头部校验和 只需要IP头部内容
+							
+
+							// 后填充数据
+							// memcpy(packet, ip, sizeof(struct ip_header)); // 往后挪，移出位置写IP头
+							// memcpy(packet, udp, sizeof(struct udp_header)); // 往后挪，移出位置写UDP头
+							// TODO 这里计算校验和会影响?
+
+							// 释放内存
+							free(pseudo_packet);
+							pseudo_packet = NULL;
+
+							// 创建 RAW 套接字
+							// int raw_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+
+							// 发送数据包
+RETRY_SEND:					
+							// printf("should send Bytes is %d\r\n", sizeof(struct ip_header) + sizeof(struct udp_header) + jpg_header.ptklen);
+							send_byte = sendto(raw_sock, packet, sizeof(struct udp_header) + jpg_header.ptklen, MSG_DONTWAIT, (struct sockaddr *)&(m_addr), sizeof(struct sockaddr_in));
+							
+							// XXX 1.发送的长度没有问题
+							// send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
+							// 		(struct sockaddr *)&(m_addr), sizeof(struct sockaddr_in));
+							printf("send_byte is %d\r\n\n\n", send_byte);
+					#else
+							send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
+									(struct sockaddr *)&(pctxd->connections.addr), sizeof(struct sockaddr_in)); 
+					#endif
+							timeouts++;
+							if(timeouts > 14) {				
+								I4SC_PRT("udp send failed last ,just can jump over this frame,trys counts:%d\r\n", timeouts);			
+								break;
+							}
+					
+							if (send_byte <= 0) {
+								/* err */
+								I4SC_PRT("udp send try:%d,total_len = %d,uint_len = %d\r\n", timeouts,total_len,uint_len);
+								os_sleep_ms(4);
+								goto RETRY_SEND;		
+							}
+						}
+					}
+					//四季私有协议发部分结束
+				}
+				//使用完一个节点,就要删除改节点,快速释放空间
+				stream_data_custom_cmd_func(get_f,CUSTOM_DEL_NODE,el);
+			}
+			//写卡完毕后,释放get_f的节点
+			free_data(get_f);//关闭文件系统句柄
+			// os_sleep_ms(235);
+		}
+	}
+//	close(raw_sock);
+//	raw_sock = -1;
+	I4SC_PRT("videoCtx Task Quit\r\n");
+}
+
+
+
+#endif
+
+
+
+#endif
+static int _video_init(video_t* pctxd)
+{
+	if(!pctxd){
+		return -1;
+	}
+
+	os_memset(pctxd, 0, sizeof(video_t));
+	os_mutex_init(&(pctxd->mutex));
+	
+
+	/*start protocol thread*/
+	csi_kernel_task_new((k_task_entry_t)_video_task, "videoCtx", pctxd, 9, 0, NULL, 4096 + 4096, &(pctxd->thread));
+
+
+	I4SC_PRT("videoCtx OK!\r\n");
+	return 0;
+}
+
+static void _oem_info_init(oem_info_t *oem_config)
+{
+	if(oem_config == NULL){
+		return ;
+	}
+	if((oem_config->flags & OEMFLAG_AP) == 0){
+		I4SC_PRT("OEM AP Default!\r\n");
+		os_memset(&(oem_config->ap_info), 0, sizeof(oem_config->ap_info));
+		//char a[]="TTcheng-";
+		os_memcpy(oem_config->ap_info.ap_prefix, OEMINFO_DEFAULT_AP_PREFIX, sizeof(oem_config->ap_info.ap_prefix));
+		if(os_strlen(OEMINFO_DEFAULT_AP_PASSWORD)){
+			os_memcpy(oem_config->ap_info.ap_pasword, OEMINFO_DEFAULT_AP_PASSWORD, sizeof(oem_config->ap_info.ap_pasword));
+		}
+		oem_config->ap_info.ap_channel = OEMINFO_DEFAULT_AP_CAHNNEL;
+		oem_config->flags |= OEMFLAG_AP;
+	}
+
+	if((oem_config->flags & OEMFLAG_NET) == 0){
+		I4SC_PRT("OEM NET Default!\r\n");
+		os_memset(&(oem_config->net_info), 0, sizeof(oem_config->net_info));
+		os_memcpy(oem_config->net_info.net_ip, OEMINFO_DEFAULT_NET_IP, sizeof(oem_config->net_info.net_ip));
+		os_memcpy(oem_config->net_info.net_mask, OEMINFO_DEFAULT_NET_MASK, sizeof(oem_config->net_info.net_mask));
+		os_memcpy(oem_config->net_info.net_gateway, OEMINFO_DEFAULT_NET_GW, sizeof(oem_config->net_info.net_gateway));
+		oem_config->flags |= OEMFLAG_NET;
+	}
+	
+	if((oem_config->flags & OEMFLAG_OEM) == 0){
+		I4SC_PRT("OEM Firmware Default!\r\n");
+		os_memset(&(oem_config->base_info), 0, sizeof(oem_config->base_info));
+		os_memcpy(oem_config->base_info.vendor, OEMINFO_DEFAULT_BASE_VENDOR, sizeof(oem_config->base_info.vendor));
+		os_memcpy(oem_config->base_info.product, OEMINFO_DEFAULT_BASE_PRODUCT, sizeof(oem_config->base_info.product));	
+		os_memcpy(oem_config->base_info.version, OEMINFO_DEFAULT_BASE_VERSION, sizeof(oem_config->base_info.version));
+		oem_config->base_info.port = OEMINFO_DEFAULT_BASE_PORT;
+		oem_config->base_info.capacity = 0;
+		oem_config->flags |= OEMFLAG_OEM;
+	}	
+}
+#if 0
+static int _config_init(config_t *config, void *cfg)
+{
+	struct sys_config *syscfg = (struct sys_config *)cfg;
+	uint8_t default_mac[6] = {0x00, 0x1c, 0xc2, 0x12,0x34,0x56};
+
+	I4SC_WARN("capacity:0x%x\r\n", config->capacity);
+
+	if(IS_ZERO_ADDR(syscfg->mac)) {		
+        os_random_bytes(default_mac+3, 3);
+		os_memcpy(syscfg->mac, default_mac, 6);	
+	}
+	
+	os_memcpy(config->mac, syscfg->mac, 6);
+	I4SC_WARN("mac:%02x:%02x:%02x:%02x:%02x:%02x\r\n", 
+			config->mac[0], config->mac[1], config->mac[2],
+			config->mac[3], config->mac[4], config->mac[5]);	
+	if(os_memcmp(syscfg->ssid, config->oem.ap_info.ap_prefix, os_strlen(config->oem.ap_info.ap_prefix))){
+		I4SC_WARN("ap mismatch:%s\r\n", syscfg->ssid);
+    	os_sprintf(syscfg->ssid, "%s%02x%02x", 
+    		config->oem.ap_info.ap_prefix, config->mac[4], config->mac[5]);
+	}
+	if(os_memcmp(syscfg->psk, config->oem.ap_info.ap_pasword, sizeof(syscfg->psk))){
+		I4SC_WARN("password mismatch:%s\r\n", syscfg->psk);
+		os_memset(syscfg->psk, 0, sizeof(syscfg->psk));
+		if(os_strlen(config->oem.ap_info.ap_pasword)){
+			os_memcpy(syscfg->psk, config->oem.ap_info.ap_pasword, os_strlen(config->oem.ap_info.ap_pasword));
+		}
+	}
+	if(syscfg->channel != config->oem.ap_info.ap_channel){
+		I4SC_WARN("channel mismatch:%d\r\n", syscfg->channel);
+		syscfg->channel = config->oem.ap_info.ap_channel;
+	}
+
+	return 0;
+}
+#else
+static int _config_init(config_t *config, void *cfg)
+{
+	struct sys_config *syscfg = (struct sys_config *)cfg;
+	uint8_t default_mac[6] = {0x00, 0x1c, 0xc2, 0x12, 0x34, 0x56};
+
+	I4SC_WARN("capacity:0x%x\r\n", config->capacity);
+
+	if (IS_ZERO_ADDR(syscfg->mac))
+	{
+		os_random_bytes(default_mac + 3, 3);
+		os_memcpy(syscfg->mac, default_mac, 6);
+	}
+
+	os_memcpy(config->mac, syscfg->mac, 6);
+	I4SC_WARN("mac:%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+			  config->mac[0], config->mac[1], config->mac[2],
+			  config->mac[3], config->mac[4], config->mac[5]);
+	if (os_memcmp(syscfg->ssid, config->oem.ap_info.ap_prefix, os_strlen(config->oem.ap_info.ap_prefix)))
+	{
+		I4SC_WARN("ap mismatch:%s\r\n", syscfg->ssid);
+		// wifi 名称 -> ssid + the last few digits of the mac address
+#if I4_DEV_BLA_1621 // WIFI名称改用 基本的 Bellababy 
+		/*os_sprintf(syscfg->ssid, "%s%02x%02x%02x",
+				   config->oem.ap_info.ap_prefix, config->mac[3], config->mac[4], config->mac[5]);*/
+#else
+		os_sprintf(syscfg->ssid, "%s%02x%02x",
+				   config->oem.ap_info.ap_prefix, config->mac[4], config->mac[5]);
+#endif
+	}
+	if (os_memcmp(syscfg->psk, config->oem.ap_info.ap_pasword, sizeof(syscfg->psk)))
+	{
+		I4SC_WARN("password mismatch:%s\r\n", syscfg->psk);
+		os_memset(syscfg->psk, 0, sizeof(syscfg->psk));
+		if (os_strlen(config->oem.ap_info.ap_pasword))
+		{
+			os_memcpy(syscfg->psk, config->oem.ap_info.ap_pasword, os_strlen(config->oem.ap_info.ap_pasword));
+		}
+	}
+	if (syscfg->channel != config->oem.ap_info.ap_channel)
+	{
+		I4SC_WARN("channel mismatch:%d\r\n", syscfg->channel);
+		syscfg->channel = config->oem.ap_info.ap_channel;
+	}
+
+	return 0;
+}
+#endif
+
+/***********************************************************************************/
+/*				             CAMERA PUBLIC FUNCTION						  		   */
+/*																				   */
+/***********************************************************************************/
+
+void i4s_set_oem_info(void *oem, uint8_t flag)
+{
+	if(flag == OEMFLAG_AP){
+		os_memcpy(&(wifi_camera.config.oem.ap_info), oem, sizeof(oeminfo_ap_t));
+		wifi_camera.config.oem.flags |= OEMFLAG_AP;
+	}else if(flag == OEMFLAG_NET){
+		os_memcpy(&(wifi_camera.config.oem.net_info), oem, sizeof(oeminfo_net_t));	
+		wifi_camera.config.oem.flags |= OEMFLAG_NET;
+	}else if(flag == OEMFLAG_OEM){
+		os_memcpy(&(wifi_camera.config.oem.base_info), oem, sizeof(oeminfo_base_t));		
+		wifi_camera.config.oem.flags |= OEMFLAG_OEM;
+	}
+}
+
+void i4s_set_oem_info_fun(struct wifi_ome_config *oem)
+{
+	i4s_set_oem_info_fun_flag=1;
+    	
+	os_memcpy(&(wifi_camera.config.oem.ap_info.ap_prefix), oem->ap_prefix, sizeof(wifi_camera.config.oem.ap_info.ap_prefix));
+		I4SC_PRT("* %s*",oem->ap_prefix);
+	os_memcpy(&(wifi_camera.config.oem.ap_info.ap_pasword), oem->ap_pasword, sizeof(wifi_camera.config.oem.ap_info.ap_pasword));
+	os_memcpy((mac), oem->net_mac, sizeof(mac));
+	os_memcpy(&(wifi_camera.config.oem.base_info.vendor), oem->vendor, sizeof(wifi_camera.config.oem.base_info.vendor));
+	os_memcpy(&(wifi_camera.config.oem.base_info.product), oem->product, sizeof(wifi_camera.config.oem.base_info.product));
+	os_memcpy(&(wifi_camera.config.oem.base_info.version), oem->version, sizeof(wifi_camera.config.oem.base_info.version));
+}
+
+int i4s_get_oem_info(void *oem, int len, uint8_t flag)
+{
+	void *pay = NULL;
+	int payLen = 0;
+	if(flag&OEMFLAG_AP){
+		payLen = sizeof(oeminfo_ap_t);
+		pay = &(wifi_camera.config.oem.ap_info);
+	}else if(flag&OEMFLAG_NET){
+		payLen = sizeof(oeminfo_net_t);
+		pay = &(wifi_camera.config.oem.net_info);
+	}else if(flag == OEMFLAG_OEM){
+		payLen = sizeof(oeminfo_base_t);
+		pay = &(wifi_camera.config.oem.base_info);
+	}
+	if(payLen > len){
+		I4SC_PRT("OEM Buffer Len Wrong:%d/%d!\r\n", payLen, len);
+		return -1;
+	}
+	os_memcpy(oem, pay, payLen);
+
+	return 0;
+}
+
+int i4s_pre_init(void *cfg)
+{
+	//oem init
+	_oem_info_init(&(wifi_camera.config.oem));
+	//init oem information
+	_config_init(&(wifi_camera.config), cfg);	
+	return 0;
+}
+
+int i4s_base_init(void)
+{
+	//memset(&res_list, 0, sizeof(struct cProCameraArrayConf));
+	//oem init
+	_oem_info_init(&(wifi_camera.config.oem));
+	return 0;
+}
+
+int i4s_wifi_init(void *cfg)
+{
+	_config_init(&(wifi_camera.config), cfg);	
+	return 0;
+}
+
+int i4s_camera_init(void)
+{
+ 	I4SC_WARN("Camera TX Lib:%s %s\r\n", __DATE__, __TIME__);
+	if(wifi_camera.status == TASK_RUN){
+		I4SC_WARN("Camera Libv2:%s %s inited\r\n", __DATE__, __TIME__);
+		return 0;
+	}
+#ifdef I4S_SUPPORT_MULTI_USER
+	i4s_multi_client_init();
+#endif
+#ifdef I4S_SUPPORT_MULTI_USER
+		memset(clients, 0, sizeof(clients));
+		active_client = I4S_MAX_CLIENTS;
+#endif
+
+	//set task run status
+	wifi_camera.status = TASK_RUN;
+	//init protocol context
+	if(_proto_init(&(wifi_camera.protocol), wifi_camera.config.oem.base_info.port) != 0){
+		I4SC_PRT("protoCtx init failed\r\n");
+		goto cQuit;
+	}
+	//init event context
+	if(_event_init(&(wifi_camera.events), wifi_camera.config.oem.base_info.port + 2) != 0){
+		I4SC_PRT("eventCtx init failed\r\n");
+		goto cQuit;
+	}
+	//init video context
+	if(_video_init(&(wifi_camera.video)) != 0){
+		I4SC_PRT("videoPart init failed\r\n");
+		goto cQuit;
+	}	
+	I4SC_PRT("i4 OK\r\n");
+/*-----audio_init------*/
+	i4s_sema_init();
+	i4s_sema_up();
+	//I4S_audio_task("pdm");
+
+   // newaudio_task();
+/*-----ear_test_init----*/
+#if EAR_TEST_FLAG
+	test_earpark_init();
+#endif
+	return 0;
+
+cQuit:
+	_proto_uninit(&(wifi_camera.protocol));
+	_event_uninit(&(wifi_camera.events));
+	_video_uninit(&(wifi_camera.video));
+	wifi_camera.status = 0;
+	
+	return -1;
+}
+
+void i4s_camera_uninit(void)
+{
+	//set task run status
+	wifi_camera.status = TASK_STOP;
+	//stop protocol context
+	_proto_uninit(&(wifi_camera.protocol));
+	//stop event context
+	_event_uninit(&(wifi_camera.events));
+	//stop video context
+	_video_uninit(&(wifi_camera.video));
+}
+
+int i4s_handle_event(int event)
+{
+	if(event == OP_WIFI_DISCONECTED){	
+		//stop send to peer
+		app_deal_close_video();
+		//set event flag
+		wifi_camera.events.wifi_connected = 0;
+		wifi_camera.events.have_addr = 0;
+	}else if(event == OP_WIFI_CONECTED){
+		//set event flag
+		wifi_camera.events.wifi_connected = 1;	
+	}
+	//test
+	if(event == OP_FIRM_BEGIN)
+	{
+		//_video_uinit(&(wifi_camera.video));
+//		test_flag = 1;
+		#if DVP_EN	
+		//dvp_close();
+		void *dvp = (void *)dev_get(HG_DVP_DEVID);
+		if(dvp)
+		{
+			dvp_close(dvp);
+		}
+		#endif
+			
+		#if USB_EN	
+		SYSCTRL_REG_OPT(sysctrl_usb20_clk_close());
+		#endif
+
+		//SYSCTRL_REG_OPT(sysctrl_usb20_clk_close());
+		delay_ms(200);
+		//wifi_camera.video.connections.status = VIDEO_STOP;
+	}
+	//
+	if(op_callback){
+		return op_callback(event);
+	}	
+
+	return 0;
+}
+
+void i4s_handle_event_charge(int charge)
+{
+	I4SC_PRT("Charge Status:%d\r\n", charge);
+	notify_force = 1;
+}
+
+/* void i4s_update_gensor_data(uint32_t value)
+{
+	gSensor = value;
+} */
+
+//callback register
+void i4s_recoder_callback_register(op_cb callback)
+{
+	recoder_callback = callback;
+	I4SC_PRT("recoder_callback_register success\r\n");
+}
+
+void i4s_op_callback_register(op_cb callback)
+{
+	op_callback = callback;
+}
+
+void i4s_led_callback_register(int (*callback)(struct cProLed*))
+{
+	led_callback = callback;
+}
+
+void i4s_common_callback_register(int (*callback)(uint8_t *, uint16_t *))
+{
+	common_callback = callback;
+}
+
+void i4s_set_capacity(uint8_t wCap)
+{
+	if(wCap == CAMCAP_GSENSOR){
+		wifi_camera.config.capacity.cap_bits.cap_gsensor = 1;
+		I4SC_PRT("[SYS]Capacity GSENSOR\r\n");
+	}
+	wifi_camera.config.capacity.capacity |= wCap;
+	I4SC_PRT("[SYS]Capacity:0x%x\r\n", wifi_camera.config.capacity.capacity);
+}
+
+uint8_t i4s_get_capacity(void)
+{
+	return wifi_camera.config.capacity.capacity;
+}
+
+void i4s_auto_generate_license(uint8_t autoGen)
+{
+	wifi_camera.config.license.lic_auto_gen = autoGen;
+	I4SC_PRT("[SYS]License Generate:%d\r\n", wifi_camera.config.license.lic_auto_gen);
+}
+
+void i4sGensorDataUpdate(uint32_t value)
+{
+  gSensor = value;
+}
+
+uint8_t i4s_set_baseinfo(uint8_t *vendor, uint8_t *product, uint8_t *version)
+{
+	oeminfo_base_t baseInfo;	
+
+	os_memset(&baseInfo, 0, sizeof(baseInfo));
+	if(i4s_get_oem_info((void*)&baseInfo, sizeof(oeminfo_base_t), OEMFLAG_OEM) < 0){
+		os_memcpy(baseInfo.vendor, OEMINFO_DEFAULT_BASE_VENDOR, sizeof(baseInfo.vendor));
+		os_memcpy(baseInfo.product, OEMINFO_DEFAULT_BASE_PRODUCT, sizeof(baseInfo.product));
+	}
+	if(vendor){
+ 		if(strlen((char *)vendor) > sizeof(baseInfo.vendor)){
+			I4SC_PRT("[TX]vendor too long:%d/%d\n", strlen((char *)vendor), sizeof(baseInfo.vendor));
+		}else{
+			os_memcpy(baseInfo.vendor, vendor, sizeof(baseInfo.vendor));
+			I4SC_PRT("[TX]Set Vendor: %s\n", baseInfo.vendor);
+		}	
+	}
+	if(product){
+ 		if(strlen((char *)product) > sizeof(baseInfo.product)){
+			I4SC_PRT("[TX]product too long:%d/%d\n", strlen((char *)product), sizeof(baseInfo.product));
+		}else{
+			os_memcpy(baseInfo.product, product, sizeof(baseInfo.product));
+			I4SC_PRT("[TX]Set Product: %s\n", product);		
+		}	
+	}
+
+	if(version){
+ 		if(strlen((char *)version) > sizeof(baseInfo.version)){
+			I4SC_PRT("[TX]version too long:%d/%d\n", strlen((char *)version), sizeof(baseInfo.version));
+		}else{
+			os_memcpy(baseInfo.version, version, sizeof(baseInfo.version));
+			I4SC_PRT("[TX]Set Version: %s\n", baseInfo.version);		
+		}	
+	}
+
+	i4s_set_oem_info((void*)&baseInfo, OEMFLAG_OEM);
+
+	return 0;
+
+}
+
+
+/* ----audio-----*/
+//audio demo 里边的buf以及下边这个是常用的获取 应该 目前无设备 空 不能确定是否有效
+#include "typesdef.h"
+#include "list.h"
+#include "dev.h"
+#include "devid.h"
+#include "osal/mutex.h"
+#include "osal/irq.h"
+#include "osal/task.h"
+
+//#include "frame_memt.h"
+#include "pdmFilter.h"
+#include "pdm_audio.h"
+
+
+//对PCM数据的放大倍数，最大127*256
+#define PCM_GAIN                                10*256//30*256//(22*256)
+
+static void rm_dc_filter_init(TYPE_FIRST_ORDER_FILTER_TYPE *filter)
+{
+    memset(filter, 0, sizeof(TYPE_FIRST_ORDER_FILTER_TYPE));
+}
+
+
+#define AUDIONUM	8
+#define AUDIOLEN	1024
+
+uint8 audio_buf[sizeof(struct hVideoUDP) + AUDIOLEN];
+uint8 audio_seq = 0;
+uint32 audio_seqall = 0;
+
+
+uint32 seq_old = 0;
+void audio_buf_send(int16* addr,int16 len)
+{
+	video_t *pctxd1 = &(wifi_camera.video);
+	int8_t sendnum = 0;
+	struct hVideoUDP *au_head = audio_buf;
+	//os_memset(audio_buf,0,AUDIOLEN);
+	au_head->type = AUDIO_TYPE;
+	au_head->seq = audio_seq++;
+	au_head->gsensorData =audio_seqall++;
+	int16 len_send = len;
+	os_memcpy(audio_buf+sizeof(struct hVideoUDP),addr,len_send);
+	len_send+=sizeof(struct hVideoUDP);
+	
+	
+	struct sockaddr_in addr1 ;
+	os_memcpy(&addr1,&(pctxd1->connections.addr),sizeof(struct sockaddr_in));
+	addr1.sin_port = htons(aport);//11000
+	//printf("audio_deal_task get_real_node_buf_len = %d\r\n",send_len);
+	if(seq_old == au_head->seq)
+		return;
+	if(addr)
+	{
+		while(1){
+			int send_byte = sendto(pctxd1->connections.sockfd, audio_buf,len_send, MSG_DONTWAIT,
+			(struct sockaddr *)&(addr1), sizeof(struct sockaddr_in)); //pctxd1->connections.sockfd//audio_fd
+			if (send_byte > 0) {
+				seq_old = au_head->seq;
+					break;
+				/* err */
+				//I4SC_PRT("udp send err:%d\r\n", send_byte);
+			}else{
+				sendnum++;
+				if(sendnum<=  14){
+					os_sleep_ms(1);
+				}
+				if(sendnum > 14){
+					break;
+				}
+			}
+		}
+	
+	}
+}
+
+
+
+/*--------------------------------earpark_test------*/
+
+#if EAR_TEST_FLAG
+//int ear_get_wifi_connect()
+//{
+//	return wifi_camera.events.wifi_connected;
+//}
+uint8 earparkbuf[I4S_BUF_SIZE];
+//VIF_ADDCFG_PTR ear_cfg;
+
+#if 0
+void earpark_sta_wlan_start(VIF_ADDCFG_PTR cfg)
+{
+	network_InitTypeDef_st network_cfg;
+
+	if(cfg->adv == 0)
+		return;
+	char *apPasword = EAR_KEY;
+	char *apPrefix = EAR_SSID;
+	bk_wlan_set_channel(1);
+	os_memset(&network_cfg, 0x0, sizeof(network_InitTypeDef_st));
+	
+	os_strcpy((char *)network_cfg.wifi_ssid, apPrefix);
+	os_strcpy((char *)network_cfg.wifi_key, apPasword);
+	
+	network_cfg.wifi_mode = BK_STATION;
+	network_cfg.dhcp_mode = DHCP_CLIENT;
+	network_cfg.wifi_retry_interval = 100;
+	bk_wlan_start(&network_cfg);
+	bk_printf("ssid:%s key:%s\r\n", network_cfg.wifi_ssid, network_cfg.wifi_key);
+
+}
+
+void i4sEarparkTestFlag(uint8_t autoGen)
+{
+	return;
+	if(autoGen == earpark_test)
+		return;
+	if(autoGen == 1&&earpark_test!=1)
+	{
+		bk_wlan_stop(BK_SOFT_AP);
+		earpark_sta_wlan_start(ear_cfg);
+	}
+	else if(autoGen == 0&&earpark_test!=0)
+		bk_wlan_stop(BK_STATION);
+	earpark_test = autoGen;
+//	I4SC_PRT("earpark_test:%d\r\n", earpark_test);
+}
+
+#endif
+static int earpark_get_devinfo( uint8_t *payload, int *paysize)
+{
+	if(!payload){
+		return 1;
+	}
+	MY_DEV_INFO_t *info = (MY_DEV_INFO_t *)(payload);
+	os_memset(info,0,sizeof(MY_DEV_INFO_t));
+
+	oeminfo_base_t base_info;
+	if(i4s_get_oem_info(&base_info, sizeof(oeminfo_base_t), OEMFLAG_OEM) < 0){
+		os_memcpy(base_info.vendor, OEMINFO_DEFAULT_BASE_VENDOR, sizeof(base_info.vendor));
+		os_memcpy(base_info.product, OEMINFO_DEFAULT_BASE_PRODUCT, sizeof(base_info.product));
+	}
+	os_memcpy(info->ver, base_info.version, sizeof(info->ver));
+
+	//wifi info
+	if(i4s_set_oem_info_fun_flag==1)
+	{
+		oeminfo_ap_t base_info1;
+		if(!i4s_get_oem_info(&base_info1, sizeof(oeminfo_base_t), OEMFLAG_AP))
+		{
+			os_memcpy(info->ssid, base_info1.ap_prefix, CPRO_INFO_SIZE);
+		}
+		
+	}
+	else
+	{
+		struct cProWifi wifi_info;
+		os_memset(&wifi_info, 0, sizeof(struct cProWifi));
+		sys_port_get_apinfo(&wifi_info);
+		os_memcpy(info->ssid, wifi_info.SSID, CPRO_INFO_SIZE);
+	}
+	//batter
+	int16_t batterinfo = i4s_handle_event(OP_GETBATTERYINFO);
+	info->vbat = (batterinfo&0x7F);
+
+	if(info->vbat == 0)
+		info->vbat = 50;
+	*paysize = sizeof(struct cProDevInfo);
+	I4SC_FATAL("wifissid == %s bat == %d\r\n",info->ssid,info->vbat);
+	return 0;
+}
+
+
+int aflag = 0;
+static int earpark_cmd_protocol_handle(int sock, uint8_t *buffer, int buf_size)
+{
+	int rev_len, snd_len;
+	socklen_t addr_len;
+	struct sockaddr_in cli_addr;
+	struct cProBasic *prohdr;
+	struct CMD_HEAD *earpark_recv;
+	op_sock=sock;
+	if(sock == -1){
+		I4SC_FATAL("parameter error\r\n");
+		return 0;
+	}
+
+	addr_len = sizeof(struct sockaddr);
+	
+	rev_len = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&cli_addr, &addr_len);
+	if(rev_len <= 0){
+		I4SC_FATAL("recv failed\r\n");
+		return 0;
+	}
+
+	earpark_recv = (struct CMD_HEAD *)buffer;
+	if(earpark_recv->magic[0] != 0x55||(uint8)earpark_recv->magic[1] != 0xaa){
+		I4SC_FATAL("bad magic\r\n");
+		return 0;
+	}
+	if(aflag == 0)
+	{
+		prohdr->reFlag = app_deal_get_license(buffer+CPRO_HDR_SZIE, sizeof(struct cProLic));
+		aflag = 1;
+	}
+	switch(earpark_recv->cmd){	
+		case DEV_INFO_REQ:
+			earpark_recv->cmd = DEV_INFO_RSP;
+			earpark_recv->magic[0] = 0x55;
+			earpark_recv->magic[1] = 0xaa;
+			earpark_recv->reserve = 0;
+			earpark_recv->len = sizeof(struct CMD_HEAD) + sizeof(struct DEV_INFO); 
+			earpark_get_devinfo(buffer+sizeof(struct CMD_HEAD), &rev_len);
+			snd_len = earpark_recv->len;
+			
+			app_deal_event_addr(&cli_addr);
+			break;
+		default:
+			I4SC_FATAL("Unsupport CMD->ID:%d CMDLEN:%d\r\n", earpark_recv->cmd, earpark_recv->len);
+			prohdr->reFlag = CPRO_NOSUCHPRO;
+			snd_len = rev_len;
+	};
+
+	return sendto(sock, buffer, snd_len, 0, (struct sockaddr *)&cli_addr, addr_len);
+
+}
+int ear_video_flag = 0;
+int ear_charing_flag = 0;
+static int earpark_pic_protocol_handle(int sock, uint8_t *buffer, int buf_size)
+{
+	int rev_len, snd_len;
+	socklen_t addr_len;
+	struct sockaddr_in cli_addr;
+	struct cProBasic *prohdr;
+	stream_req_t * prohdr1;
+	
+	//static int count = 0;
+	if(sock == -1){
+		I4SC_FATAL("parameter error\r\n");
+		return 0;
+	}
+	addr_len = sizeof(struct sockaddr);
+	rev_len = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&cli_addr, &addr_len);
+	if(rev_len <= 0){
+		I4SC_FATAL("recv failed\r\n");
+		return 0;
+	}
+	prohdr1 = (stream_req_t * )buffer;
+	if(prohdr1->img_head != 0x20){
+		I4SC_FATAL("bad magic\r\n");
+		return 0;
+	}
+	switch(prohdr1->img_req){
+		case 0x46:
+
+			if(wifi_camera.events.have_addr == 0){
+				I4SC_FATAL("Force Set addr!!!\r\n");
+				app_deal_event_addr(&cli_addr);
+			}
+			prohdr->reFlag = app_deal_open_video(sock, &cli_addr, NULL);
+			prohdr->len = 0;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			ear_video_flag = 1;
+			break;
+		case 0x37:
+
+			prohdr->reFlag = app_deal_close_video();
+			prohdr->len = 0;
+			snd_len = prohdr->len + CPRO_HDR_SZIE;
+			ear_video_flag = 0;
+			break;	
+		default:
+			I4SC_FATAL("Unsupport CMD->ID:%d CMDLEN:%d\r\n", prohdr1->img_req, rev_len);
+			prohdr->reFlag = CPRO_NOSUCHPRO;
+			snd_len = rev_len;
+	}
+	return 11;
+	return sendto(sock, buffer, snd_len, 0, (struct sockaddr *)&cli_addr, addr_len);
+}
+
+static void _earpark_test_tool_task(void* arg)
+{
+	proto_t	*pctxd = (proto_t*)arg;
+    fd_set rdset;
+    struct timeval tv = {0, 200000};
+	int ret, maxfd;
+
+	if(!pctxd){
+		I4SC_FATAL("protoCtx_task null\r\n");
+		return;
+	}
+	while(WIFI_RUN_STATUS == TASK_RUN){
+        FD_ZERO(&rdset);
+        FD_SET(pctxd->cmd_sockfd, &rdset);	
+        FD_SET(pctxd->pic_sockfd, &rdset);
+		tv.tv_sec = 0;
+		tv.tv_usec = 200000; /*200ms*/
+		maxfd = max(pctxd->cmd_sockfd, pctxd->pic_sockfd);
+		
+        ret = select(maxfd+1, &rdset, NULL, NULL, &tv);
+        if (ret < 0) {
+			I4SC_FATAL("select failed:%d\r\n", ret);
+            break;
+        }else if(ret == 0) {
+			continue;
+        }
+		app_deal_d_open_video();
+		if(FD_ISSET(pctxd->cmd_sockfd, &rdset)){
+			/*handle request*/
+			earpark_cmd_protocol_handle(pctxd->cmd_sockfd,pctxd->buffer, sizeof(pctxd->buffer));
+		}
+		if(FD_ISSET(pctxd->pic_sockfd, &rdset)){
+			/*handle request*/
+			earpark_pic_protocol_handle(pctxd->pic_sockfd,pctxd->buffer, sizeof(pctxd->buffer));
+		}
+		
+	}
+
+	I4SC_PRT("earpark Task Quit\r\n");
+	
+}
+
+
+static int earpark_test_tool_init(proto_t	*pctxd, uint16 port)
+{
+	int ret;
+	struct sockaddr_in addr;
+
+	if(!pctxd){
+		return 0;
+	}
+	os_memset(pctxd, 0, sizeof(proto_t));
+	pctxd->port = port;
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(pctxd->port);
+	/*init cmd socket*/
+    pctxd->cmd_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (pctxd->cmd_sockfd  == -1) {
+		I4SC_PRT("create cmd udp failed\r\n");
+		goto EXIT;
+	}
+	I4SC_PRT("csock:%d\r\n", pctxd->cmd_sockfd);
+	/*bind socket*/
+    ret = bind(pctxd->cmd_sockfd, (struct sockaddr *)&addr, sizeof (struct sockaddr));
+	if(ret){
+		I4SC_PRT("bind udp failed\r\n");
+		goto EXIT;
+	}
+	//create picture sockfd
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(pctxd->port-10);
+	/*init cmd socket*/
+    pctxd->pic_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (pctxd->pic_sockfd  == -1) {
+		I4SC_PRT("create pic udp failed\r\n");
+		goto EXIT;
+	}
+	
+	I4SC_PRT("psock:%d\r\n", pctxd->pic_sockfd);
+	/*bind socket*/
+    ret = bind(pctxd->pic_sockfd, (struct sockaddr *)&addr, sizeof (struct sockaddr));
+	if(ret){
+		I4SC_PRT("bind pic udp failed\r\n");
+		goto EXIT;
+	}	
+
+	/*start protocol thread*/
+
+	csi_kernel_task_new((k_task_entry_t)_earpark_test_tool_task, "earpark", pctxd, 9, 0, NULL, 2048, &(pctxd->thread));						
+	if(ret != 0){
+		I4SC_PRT("create earpark thread failed\r\n");
+		goto EXIT;
+	}
+	
+	I4SC_PRT("earpark OK!\r\n");
+	return 0;
+	
+EXIT:
+	I4SC_PRT("earpark fquit!\r\n");
+	/*close socket*/
+	if(pctxd->cmd_sockfd){
+		close(pctxd->cmd_sockfd);
+		pctxd->cmd_sockfd = 0;
+	}
+	if(pctxd->pic_sockfd){
+		close(pctxd->pic_sockfd);
+		pctxd->pic_sockfd = 0;
+	}
+
+	return -1;
+}
+int cnt = 1;
+void video_earpark_add_pkt_header(TV_HDR_PARAM_PTR param)
+{
+		struct tvideo_my_hdr_st* elem_tvhdr = (MY_HDR_ST*)(param->ptk_ptr);
+		elem_tvhdr->id= param->frame_id;
+
+		elem_tvhdr->is_eof = param->is_eof;
+//		if(param->is_eof == 1)
+//			elem_tvhdr->pkt_cnt = (uint8)param->frame_cnt;
+//		else
+//			elem_tvhdr->pkt_cnt = 0;
+
+		elem_tvhdr->pkt_cnt = cnt;
+		elem_tvhdr->reserve[0] = param->frame_cnt - cnt;
+		cnt++;
+		if(param->is_eof == 1)
+			cnt = 1;
+		elem_tvhdr->magic[0] = 0x55;
+		elem_tvhdr->magic[1] = 0xaa;
+		elem_tvhdr->size = (uint32)(sizeof(MY_HDR_ST)+param->ptklen);
+		volatile uint32_t gseneordate = gSensor;
+		elem_tvhdr->axis_info.z = gseneordate & 0x3ff;
+		elem_tvhdr->axis_info.y = (gseneordate>>10) & 0x3ff;
+		elem_tvhdr->axis_info.x = (gseneordate>>10) & 0x3ff;
+
+}
+
+proto_t earpark;
+//proto_t
+
+void ear_charing_set()
+{
+	ear_charing_flag = 1;
+}
+int ear_charing_get()
+{
+	return ear_charing_flag;
+}
+void test_earpark_init()
+{
+	wifi_camera.status = TASK_RUN;
+	char *apPasword = EAR_KEY;
+	char *apPrefix = EAR_SSID;
+
+	if(earpark_test_tool_init(&(earpark),7090) != 0){
+		I4SC_PRT("earpark init failed\r\n");
+		return;
+	}
+
+}
+int ear_ssid_find_flag = 0;
+void test_ear_ssid_find()
+{
+	I4SC_PRT("earpark ssid find!!\r\n");
+	ear_ssid_find_flag = 1;
+}
+void test_earpark_uninit()
+{
+	if(!earpark.thread){
+		return ;
+	}
+
+	close(earpark.cmd_sockfd);
+	close(earpark.pic_sockfd);	
+
+	
+	csi_kernel_task_del(earpark.thread);
+	os_memset(&earpark, 0, sizeof(proto_t));
+
+	I4SC_PRT("test_earpark Quit\r\n");
+}
+int ear_flag_stat()
+{
+	return earpark_test;
+}
+void i4s_ear_start() // earpirk test start use this
+{
+	earpark_test = 1;
+	if(ear_charing_flag == 0)
+		goto EXIT;
+//	extern void i4s_net_mode_change(uint8  wifi_exchange_mode);
+//	i4s_net_mode_change(WIFI_MODE_STA);
+	int i = 0;
+	int j = 5;
+	while(1)
+	{
+		delay_ms(100);
+		if(wifi_camera.events.wifi_connected == 0)
+		{
+			I4SC_PRT("no connected  %d\r\n",i++);
+			if(i > j)
+				goto EXIT;
+		}
+		else
+		{
+			i = 0;
+			I4SC_PRT("connected\r\n");
+			earpark_test = 1;
+			if(earpark_test != 1)
+				earpark_test = 1;
+			return ;
+		}
+		if(ear_ssid_find_flag == 1)
+			j = 15;
+	}
+EXIT:
+	I4SC_PRT("earpark fquit!\r\n");
+//	i4s_net_mode_change(WIFI_MODE_AP);
+	extern void close_wifi();
+	close_wifi();
+	test_earpark_uninit();
+	I4SC_PRT("test flag == %d\r\n",earpark_test);
+	if(earpark_test)
+		earpark_test = 0;
+
+}
+#endif
+
+
+//farc_testing code 
+/**
+ * 1: access product test  0：leave product test  2:after access product test
+ */
+op_cb farc_testing_callback; /*operation callback*/
+
+char sta_list[30][32] = {0};
+int sta_check_over_flag = 1;
+extern struct sys_config sys_cfgs;
+extern void open_wifi(void);
+extern void close_wifi(void);
+
+
+void i4s_testing_callback_register(op_cb callback)
+{
+	farc_testing_callback = callback;
+}
+
+
+void set_check_sta_flag(int flag)
+{
+	sta_check_over_flag = flag;
+
+}
+
+void i4s_clean_sta_list()
+{
+	for(int i = 0;i<30;i++)
+	{
+			memset(sta_list[i],0,32);
+
+	}
+}
+void i4s_add_sta_list(char *ssid)
+{
+	for(int i = 0;i<30;i++)
+	{
+		if(strlen(sta_list[i]) == 0)
+		{
+			memcpy(sta_list[i],ssid,strlen(ssid));
+			return;
+		}
+	}
+}
+
+int i4s_find_sta_info(char *ssid)
+{
+	os_printf("i4s_find_sta_info1\r\n");
+	for(int i = 0;i<30;i++)
+	{
+		if(strlen(sta_list[i]) != 0)
+		{
+			os_printf("stalist[%d] = %s\r\n",i,sta_list[i]);
+			if(memcmp(sta_list[i],ssid,strlen(ssid)) == 0)
+				return 1;
+		}
+	}
+	return 0;
+}
+void i4s_open_wifi()
+{
+	open_wifi();
+}
+
+void i4s_close_wifi()
+{
+	close_wifi();
+}
+
+void i4s_wifi_mode_change_test()
+{
+	close_wifi();
+	if(sys_cfgs.wifi_mode == WIFI_MODE_AP)
+		sys_cfgs.wifi_mode = WIFI_MODE_STA;
+	else
+		sys_cfgs.wifi_mode = WIFI_MODE_AP;
+	open_wifi();
+
+}
+
+
+void i4s_test_check()
+{
+	//切换wifi模式
+	sta_check_over_flag = 1;
+	 if(sys_cfgs.wifi_mode == WIFI_MODE_AP)	//add
+	 {
+	 	os_printf("i4s_test1\r\n");
+		i4s_wifi_mode_change_test();
+	}
+	//设置标志位 1则表示进入了厂测模式
+	farc_testing_callback(1);
+	uint8_t i = 0;
+	//等待时间
+	while(sta_check_over_flag != 2)
+	{
+		delay_ms(20);
+		farc_testing_callback(1);
+		mcu_watchdog_feed();
+		i++;
+		if(i>50)	//5s>1s
+			break;
+	}
+	//找到wifi名称或者连接上wifi
+	int ret = i4s_find_sta_info(TEST_STA_SSID);
+	if(ret == 0 && sta_check_over_flag != 2)
+	{
+		os_printf("i4s_test2\r\n");
+		i4s_wifi_mode_change_test();
+		//os_memset(sta_list,32*30,0);
+		i4s_clean_sta_list();
+		farc_testing_callback(0);
+		os_printf("qc_mode_1=%d\r\n",qc_mode);
+		return;
+	}
+		//修改图片的大小
+	#if 0
+	//		delay_ms(100);
+	//		struct dvp_device *dvp_test;
+	//		dvp_test = (struct dvp_device *)dev_get(HG_DVP_DEVID);
+	//		int c = 0;
+	//		c = dvp_frame_load_precent(dvp_test,2); 		//lx test
+	//		os_printf("dvp c = %d\r\n",c);
+	//		c = dvp_set_half_size(dvp_test,1);//lx test
+	//		os_printf("dvp c = %d\r\n",c);
+		struct jpg_device *jpg_test = NULL;
+		extern char quality_tab[6][128];
+		jpg_test = (struct jpg_device*)dev_get(HG_JPG0_DEVID);
+		jpg_updata_dqt(jpg_test, quality_tab[0]);
+		/*
+		通过 dev_get()获取 jpg 的句柄,针对当前选用的 0 号量化表进行质量微调，提高
+		一个等级的图像质量
+		*/
+		jpg_set_qt(jpg_test,4);
+	
+	#endif
+	qc_mode = 1;	//修改图片大小
+	//设置标志位 2则表示连接上路由器
+	farc_testing_callback(2);
+	os_printf("qc_mode_2=%d\r\n",qc_mode);
+	return;
+
+}
+int i4s_send_stream_control(void)
+{
+	if(qc_mode)
+	{
+		return frame_mem_id%2;
+	}
+	return 1;
+}
+
+//CAMERA CHECK
+__weak int i4s_camera_offline_check()
+{
+	return 0;
+}
+
+
