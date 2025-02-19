@@ -81,6 +81,7 @@ git remote add <新别名> <新的远程仓库地址> # git remote add origin ..
 ```
 ssh-keygen -t rsa -C "halibaduoxiansheng@gmail.com"
 ```
+不想跳转，就是这个，然后一路回车，将终端提示位置下的id_rsa.pub内的内容复制到github网页下的Setting->SSH下新增的里面，确认即可
 
 #### 删除配置的远程仓库
 
