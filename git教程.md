@@ -136,3 +136,11 @@ git init / git lfs install / git lfs track "*.cab" # replace your file / git add
 固定下载某一分支
 git clone -b master <repository_url>
 
+#### 如果是移动后SSH失效
+先重新走一遍ssh流程，然后类似像下面的设置一遍，就行了
+```
+git remote set-url origin git@github.com:halibaduoxiansheng/new_smartbrush.git
+```
+
+
+
