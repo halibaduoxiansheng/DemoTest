@@ -25,6 +25,8 @@
 git add . # 所有文件、增加到缓冲区
 git commit -m "first time" # 添加到本地仓库
 git remote add origin https://github.com/halibaduoxiansheng/DemoTest.git #指明远程仓库
+# 注意此处也有另外一种 SSH的方式 成功率更高 配合github浏览器端设置SSH，
+git remote add origin git@github.com:halibaduoxiansheng/Repository/DemoTest.git
 git push -u origin master # 增加到主分支，第一次需要密码验证
 ```
 
@@ -117,23 +119,27 @@ git log -n num # 只显示num条
 
 ![](F:\MarktextPhoto\2024-08-14-11-56-10-image.png)
 
-如果是在新电脑上的编辑，而且本地版本还要高于github的版本可以：
+### 如果是在新电脑上的编辑，而且本地版本还要高于github的版本可以：
 ```
 git push -f origin master #有冲突会提示
 ```
-然后
+### 然后
 ```
 git push origin master # 提交
 ```
-获取可以一开始就直接强制提交
+### 获取可以一开始就直接强制提交
 ```
 git push -f origin master
 ```
-传输大的文件，首先：
+## 传输大的文件
+#### 首先：
+```
 https://git-lfs.com/
+```
 下载安装，然后
+```
 git init / git lfs install / git lfs track "*.cab" # replace your file / git add * / git commit -m "ok" / git push -f origin master、
-
+```
 固定下载某一分支
 git clone -b master <repository_url>
 
@@ -142,6 +148,18 @@ git clone -b master <repository_url>
 ```
 git remote set-url origin git@github.com:halibaduoxiansheng/new_smartbrush.git
 ```
-
+### 回退版本
+##### 先:
+```
+git log # 找到你想要回退到的版本的 commit ID
+```
+#### 后
+```
+git reset --hard <commit_id> # ：将 HEAD 指向指定的提交，并同时修改暂存区和工作目录，使其与指定的提交完全一致。这会丢失回退点之后的所有提交，请谨慎使用。
+git reset --mixed <commit_id> # ：将 HEAD 指向指定的提交，并修改暂存区，但保持工作目录不变。这会保留工作目录中的修改，但会将回退点之后的提交从暂存区中移除。
+git reset --soft <commit_id> # ：将 HEAD 指向指定的提交，但保持暂存区和工作目录不变。这会保留工作目录和暂存区中的所有修改，并将回退点之后的提交标记为未提交的更改。
+git revert <commit_id> # ：创建一个新的提交，撤销指定的提交所做的更改。Git 会自动打开一个编辑器，让你输入提交信息。
+git checkout <commit_id> # ：将 HEAD 指向指定的提交，并将工作目录修改为该提交的状态。这会将你的工作目录置于“分离 HEAD”状态，这意味着你不在任何分支上。
+```
 
 
