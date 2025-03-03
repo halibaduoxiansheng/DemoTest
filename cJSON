@@ -14,3 +14,8 @@ char *json_buf = cJSON_Print(ackjson);
 使用完成，释放空间
 free(json_buf);
 cJSON_Delete(ack_json);
+
+无论是创建的还是接受解析的 json 数据
+一定不再使用了 就需要 释放空间 否则会照成空间泄露
+
+其次，将json最外层的json释放了，内部的就可以不用写了
