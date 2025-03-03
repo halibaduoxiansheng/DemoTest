@@ -1,0 +1,202 @@
+/* 
+	prev			next
+	<----  node    ---->
+
+	插入(头插法)
+	| ----------------|
+	|				  |
+	|			-->   V
+	--NODE 			HEAD--|
+		^				  |
+		|		<--		  |
+		------------------|
+	
+	初始化
+		  ------|
+		  |		|
+		  v		|
+	----HEAD----|
+	|	  ^
+	|	  |
+	|-----|
+*/
+
+
+struct list_head_ {
+	struct list_head_ *next, *prev;
+	uint16_t img_size; // 根据获取图片的实际大小 动态申请空间
+	uint8_t *buf; // 指向该节点 图片数据 开始位置
+}__attribute__((__packed__));
+
+
+struct Pic_psram {
+	struct list_head_ *list_head;
+};
+struct Pic_psram *pic_psm = NULL;
+
+struct list_head_ *_list_add_(struct list_head_ *new, struct list_head_ *head, struct list_head_ *next) {
+	if (!new || !head || !next) {
+		return NULL;
+	}
+	next->prev = new;
+	new->next = next;
+	new->prev = head;
+	head->next = new;
+	
+	return new;
+}
+
+struct list_head_ *list_add_(struct list_head_ *head, uint16_t img_size) { // 从前往后遍历，找到为NULL的位置
+	if (!head) {
+		printf(""head is NULL\r\n);
+		return NULL;
+	}
+	
+	struct list_head_ *new = NULL, *temp = NULL;
+	new = (struct list_head_ *)custom_malloc_psram(sizeof(struct list_head_));
+	if (new == NULL) {
+		return NULL;
+	}
+	new->buf = (uint8_t *)custom_malloc_psram(img_size);
+	if (!(new->buf)) {
+		printf("new->buf malloc failed\r\n");
+		custom_free_psram(new);
+		return NULL;
+	}
+	temp = _list_add_(new, head, head->next);
+	if (!temp) {
+		custom_free_psram(new->buf); // 先里后外
+		custom_free_psram(new);
+		return NULL;
+	}
+	return new;
+}
+
+struct list_head_ *list_get_(struct list_head_ *head) {
+	if (!head) {
+		printf("head is NULL\r\n");
+		return NULL;
+	}
+	struct list_head_ *temp = NULL;
+	if (head->prev != head) { // 说明至少有一个节点
+		temp = head->prev; // temp 即为存有图片的节点
+		if (temp->prev != head) { // 说明链表中至少两个节点
+			new->prev->next = head;
+			head->prev = new->prev;
+		} else { // 说明链表中只有temp一个节点
+			head->prev = head;
+			head->next = head;
+		}
+	} else { // 链表中没有节点
+		return NULL;
+	}
+	return temp;
+}
+
+// 初始化
+struct Pic_psram *pic_psram_init(struct Pic_psram *pic_list) { // pic_psm = pic_psram_init(pic_psm);
+	if (pic_list) {
+		printf("pic_list is not NULL,do you have init it again?\r\n");
+		return NULL;
+	}
+	
+	pic_list = (struct Pic_psram *)custom_malloc_psram(sizeof(struct Pic_psram)); // TODO malloc 失败分析
+	if (!pic_list) {
+		printf("pic_list malloc failed\r\n");
+		return NULL;
+	}
+	pic_list->list_head = (struct list_head *)custom_malloc_psram(sizeof(struct list_head));
+	if (!(pic_list->list_head)) {
+		printf("pic_list->list_head malloc failed\r\n");
+		return NULL;
+	}
+	
+	pic_list->list_head->next = pic_list->list_head;
+	pic_list->list_head->prev = pic_list->list_head;
+	
+	return pic_list;
+}
+
+// 不断的获取图片 获取成功就调用这个函数 (获取有效get_f后) 存入  头插法
+int8_t pic_data_insert(struct Pic_psram *pic_psm, struct data_structure *get_f) {
+	struct stream_jpeg_data_s *dest_list;
+    struct stream_jpeg_data_s *dest_list_tmp;
+	struct stream_jpeg_data_s *el, *tmp;
+	uint8_t *jpeg_buf_addr = NULL;
+	uint16_t img_size = 0, index = 0;
+	uint32 _t_len = 0, node_len = 0;
+	
+	
+	if (!pic_psm || !get_f) {
+		printf("invalid parameter\r\n");
+		return -1;
+	}
+	
+	img_size = get_stream_real_data_len(get_f); // 图片实际长度
+	
+	// 头 不存储 
+	struct list_head_ *head_temp = pic_psm->list_head;
+	
+	pic_psm->list_head = list_add_(pic_psm->list_head, img_size);
+	if (!(pic_psm->list_head)) {
+		pic_psm->list_head = head_temp;
+		return -2;
+	}
+	pic_psm->list_head->img_size = img_size;
+	
+	dest_list = (struct stream_jpeg_data_s *)GET_DATA_BUF(get_f);
+	dest_list_tmp = dest_list;
+	node_len = GET_NODE_LEN(get_f);
+	
+	LL_FOREACH_SAFE(dest_list, el, tmp) {
+		if(dest_list_tmp == el) {
+			continue;
+		}
+		jpeg_buf_addr = (uint8_t *)GET_JPG_SELF_BUF(get_f,el->data);
+		if (img_size >= node_len) {
+			img_size -= node_len;
+			_t_len = node_len;
+		} else {
+			_t_len = img_size;
+		}
+		
+		memcpy(pic_psm->list_head->buf + index, jpeg_buf_addr, _t_len);
+		index += _t_len;
+		
+		DEL_JPEG_NODE(get_f, el);
+	}
+	
+	pic_psm->list_head = head_temp;
+	return 0;
+}
+
+
+/*
+不断的使用pic_list_data_get 去判断是否有图片
+有就使用 使用完用 pic_list_node_delete 处理回收一下
+*/
+
+// 链表中 有图片就返回链表节点 没有就NULL
+// 插入图片是头插法 就需要将先插入的先提取出来
+struct list_head_ *pic_list_data_get(struct Pic_psram *pic_psm) {
+	if (!pic_psm || !(pic_psm->list_head)) {
+		printf("pic_psm or pic_psm->list_head is NULL\r\n");
+		return NULL;
+	}
+	
+	struct list_head_ *node = NULL;
+	node = list_get_(pic_psm->list_head);
+	return node;
+}
+
+// 该图片发送完成后，将该节点回收
+int8_t pic_list_node_delete(struct list_head_ *list) {
+	if (!list) {
+		printf("list is NULL\r\n");
+		return -1;
+	}
+	
+	custom_free_psram(list->buf);
+	custom_free_psram(list);
+	return 0;
+}
