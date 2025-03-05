@@ -28,13 +28,13 @@ struct list_head_ {
 	uint8_t *buf; // 指向该节点 图片数据 开始位置
 }__attribute__((__packed__));
 
-
+// 可扩展性 (目前这个链表中只有图片 可以模仿加入一个按钮，LED之类的)
 struct Pic_psram {
 	struct list_head_ *list_head;
 };
 struct Pic_psram *pic_psm = NULL;
 
-struct list_head_ *_list_add_(struct list_head_ *new, struct list_head_ *head, struct list_head_ *next) {
+static struct list_head_ *_list_add_(struct list_head_ *new, struct list_head_ *head, struct list_head_ *next) {
 	if (!new || !head || !next) {
 		return NULL;
 	}
@@ -46,7 +46,7 @@ struct list_head_ *_list_add_(struct list_head_ *new, struct list_head_ *head, s
 	return new;
 }
 
-struct list_head_ *list_add_(struct list_head_ *head, uint16_t img_size) { // 从前往后遍历，找到为NULL的位置
+static struct list_head_ *list_add_(struct list_head_ *head, uint16_t img_size) { // 从前往后遍历，找到为NULL的位置
 	if (!head) {
 		printf(""head is NULL\r\n);
 		return NULL;
@@ -65,14 +65,21 @@ struct list_head_ *list_add_(struct list_head_ *head, uint16_t img_size) { // �
 	}
 	temp = _list_add_(new, head, head->next);
 	if (!temp) {
-		custom_free_psram(new->buf); // 先里后外
-		custom_free_psram(new);
+		if (new && new->buf) {
+			custom_free_psram(new->buf); // 先里后外
+		}
+		if (new) {
+			custom_free_psram(new);
+			new = NULL;
+		}
 		return NULL;
 	}
+	
+	new->img_size = img_size;
 	return new;
 }
 
-struct list_head_ *list_get_(struct list_head_ *head) {
+static struct list_head_ *list_get_(struct list_head_ *head) {
 	if (!head) {
 		printf("head is NULL\r\n");
 		return NULL;
@@ -87,13 +94,107 @@ struct list_head_ *list_get_(struct list_head_ *head) {
 			head->prev = head;
 			head->next = head;
 		}
-	} else { // 链表中没有节点
+	} else { // 链表中没有节点 只有头节点 但是头节点内是不存入数据的 （注意，以防万一：free的时候还是会检测）
 		return NULL;
 	}
 	return temp;
 }
 
-// 初始化
+// 如果存在node节点 则删除
+// 0: 删除成功 		非0：失败
+static int8_t list_delete_(struct list_head_ *head, struct list_head_ *node) {
+	if (!head || !node) {
+		printf("the arg of parameter : head or node is NULL\r\n");
+		return NULL;
+	}
+	
+	// 需要删除的就是头节点
+	if (node == head) {
+		printf("you have delete the head node\r\n");
+		if (node && node->buf) {
+			custom_free_psram(node->buf);
+		}
+		if (node) {
+			custom_free_psram(node);
+			node = NULL;
+		}
+		return 0;
+	}
+	
+	struct list_head_ *temp = head->prev;
+	while(temp != head) { // 
+		if (temp == node) { // find this node,delete it
+			if (temp->prev != head) { // 删除后，链表中只有还有两节点
+				temp->prev->next = head;
+				head->prev = temp->prev;
+				if (node && node->buf) {
+					custom_free_psram(node->buf);
+				}
+				if (node) {
+					custom_free_psram(node);
+				}
+				return 0;
+			} else { // 删除后 链表中只有头节点了
+				head->prev = head;
+				head->next = head;
+				if (node && node->buf) {
+					custom_free_psram(node->buf);
+				}
+				if (node) {
+					custom_free_psram(node);
+				}
+			}
+		} else {
+			temp = temp->prev;
+		}
+	}
+	
+	printf("we can not find this node,then we can not delete it\r\n");
+	return -3;
+}
+
+// 返回0： 是空   返回非0：不是空
+static int8_t list_is_empty_(struct list_head_ *head) {
+	if (!head) {
+		printf("head is NULL\r\n");
+		return 2;
+	}
+	if (head->prev == head || head->next == head) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+// 返回此节点的上一个节点
+// 返回非 NULL 值就是成功 (此处不管是不是返回头节点的，自己判断)
+static inline struct list_head_ *get_prev_node(struct list_head *node) {
+	if (!node) {
+		printf("node is NULL\r\n");
+		return NULL;
+	}
+	if (node->prev) {
+		return node->prev;
+	} else {
+		return NULL;
+	}
+}
+
+// 返回此节点的上一个节点
+// 返回非 NULL 值就是成功 (此处不管是不是返回头节点的，自己判断)
+static inline struct list_head_ *get_next_node(struct list_head *node) {
+	if (!node) {
+		printf("node is NULL\r\n");
+		return NULL;
+	}
+	if (node->next) {
+		return node->next;
+	} else {
+		return NULL;
+	}
+}
+
+// 初始化 线程安全 但建议只调用一次即可 
 struct Pic_psram *pic_psram_init(struct Pic_psram *pic_list) { // pic_psm = pic_psram_init(pic_psm);
 	if (pic_list) {
 		printf("pic_list is not NULL,do you have init it again?\r\n");
@@ -117,7 +218,38 @@ struct Pic_psram *pic_psram_init(struct Pic_psram *pic_list) { // pic_psm = pic_
 	return pic_list;
 }
 
+// 反初始化
+// FIXME 函数时候后，请主动将pic_list->list_head 的实参设置为NULL
+int8_t pic_psram_deinit(struct Pic_psram *pic_list) { // TODO 最好注意一下 是否使用二级指针 因为可能会有野指针的出现
+	if (!pic_list || !(pic_list->list_head)) {
+		printf("the parameter of pic_list is NULL,we can not deinit it,please check it\r\n");
+		return -1;
+	}
+	
+	// 先将其链表中的所有申请过的 存储图片的位置释放掉
+	struct list_head_ *temp = pic_list->list_head->prev;
+	struct list_head_ *temp_1 = NULL;
+	while(temp != pic_list->list_head) { // 轮询一波，将除非头节点的全部free
+		temp_1 = temp->prev;
+		if (temp && temp->buf) {
+			custom_free_psram(temp->buf);
+		}
+		if (temp) {
+			custom_free_psram(temp);
+			temp = NULL;
+		}
+		temp = temp_1;
+	}
+	// 此时只有头节点没有被free了
+	if (pic_list->list_head->buf) {
+		custom_free_psram(pic_list->list_head->buf);
+	}
+	custom_free_psram(custom_free_psram->list_head);
+	custom_free_psram->list_head = NULL;
+}
+
 // 不断的获取图片 获取成功就调用这个函数 (获取有效get_f后) 存入  头插法
+// 放回 0： 即插入图片成功  		其余 ： 失败
 int8_t pic_data_insert(struct Pic_psram *pic_psm, struct data_structure *get_f) {
 	struct stream_jpeg_data_s *dest_list;
     struct stream_jpeg_data_s *dest_list_tmp;
@@ -142,7 +274,7 @@ int8_t pic_data_insert(struct Pic_psram *pic_psm, struct data_structure *get_f) 
 		pic_psm->list_head = head_temp;
 		return -2;
 	}
-	pic_psm->list_head->img_size = img_size;
+	//pic_psm->list_head->img_size = img_size;
 	
 	dest_list = (struct stream_jpeg_data_s *)GET_DATA_BUF(get_f);
 	dest_list_tmp = dest_list;
@@ -196,7 +328,9 @@ int8_t pic_list_node_delete(struct list_head_ *list) {
 		return -1;
 	}
 	
-	custom_free_psram(list->buf);
+	if (list->buf) {
+		custom_free_psram(list->buf);
+	}
 	custom_free_psram(list);
 	return 0;
 }
