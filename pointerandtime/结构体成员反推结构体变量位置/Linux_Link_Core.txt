@@ -1,0 +1,36 @@
+Linux源文件 -> list.h
+
+模仿原理：
+
+struct list_head {
+	struct list_head *next,*prev;
+};
+
+
+struct event {
+    int id;
+    struct list_head list;  // 双向链表节点
+};
+
+// 程序代码
+struct event e;
+e.id = 66;
+
+struct list_head *pos = &(e.list);
+
+// @param pos 是 list_head 的类型
+// @param struct event 是链表节点的结构体类型 
+// @param list 链表节点字段名
+struct event *ev = list_entry(pos, struct event, list);
+printf("ev->id = %d\r\n", ev->id);
+// 此时的 ev->id 就是 e.id ==> 66
+
+
+// 原理 ==> 核心思路是通过指针运算，将成员指针偏移回结构体的起始地址
+#define list_entry(ptr, type, member) \
+    ((type *)((char *)(ptr) - (unsigned long)(&((type *)0)->member)))
+// 解释如下
+(type *)0: 创建一个空指针类型转换。
+&((type *)0)->member: 获取结构体中 member 的地址偏移量。
+(char *)(ptr) - 偏移量: 将实际的成员指针回退到结构体起始地址。
+(type *): 将回退后的地址转换回目标结构体指针。
