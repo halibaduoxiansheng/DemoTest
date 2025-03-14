@@ -1806,6 +1806,64 @@ static void _video_task(void* arg)
 	I4SC_PRT("videoCtx Task Quit\r\n");
 }
 #else
+
+/**
+ * 根据参数 times 决定 1秒多少张比较合适
+ * （1秒5帧 勉强能撑住）
+ * @param  times 1秒平均多少张合适
+ * @return      0: 允许  非0： 不允许
+ */
+#define TIMES_INTERVAL   (5)
+uint8_t one_minute_allow_check(void) {
+	static uint64_t time_should_interval = (uint64_t)(1000/TIMES_INTERVAL); // 平均应该过多久时间允许传一张图片 (unit: ms)
+	static uint64_t last_ok_time = 0; // last upload success time
+	uint64_t now_time = os_jiffies_to_msecs(os_jiffies());
+
+	if ((now_time - last_ok_time) >= time_should_interval) {
+		last_ok_time = now_time;
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+static void pic_clear_data(struct data_structure *get_f) {
+	if (!get_f) {
+		printf("this arg is invalid\r\n");
+		return;
+	}
+	struct stream_jpeg_data_s *dest_list;
+    struct stream_jpeg_data_s *dest_list_tmp;
+	struct stream_jpeg_data_s *el, *tmp;
+	uint8_t *jpeg_buf_addr = NULL;
+	uint32 _t_len = 0, node_len = 0;
+	uint16_t img_size = 0;
+	
+	img_size = get_stream_real_data_len(get_f); // 图片实际长度
+	
+	dest_list = (struct stream_jpeg_data_s *)GET_DATA_BUF(get_f);
+	dest_list_tmp = dest_list;
+	node_len = GET_NODE_LEN(get_f);
+	
+	// LL_FOREACH_SAFE(dest_list, el, tmp) {
+	for((el) = (dest_list); (el) && ((tmp) = (el)->next, 1); (el) = (tmp)) {
+		if(dest_list_tmp == el) {
+			continue;
+		}
+		jpeg_buf_addr = (uint8_t *)GET_JPG_SELF_BUF(get_f,el->data);
+		if (img_size >= node_len) {
+			img_size -= node_len;
+			_t_len = node_len;
+		} else {
+			_t_len = img_size;
+		}
+		
+		DEL_JPEG_NODE(get_f, el);
+	}
+
+	free_data(get_f);
+	get_f = NULL;
+}
 static void _video_task(void* arg)
 {
 	video_t *pctxd = (video_t*)arg;
@@ -1878,9 +1936,20 @@ static void _video_task(void* arg)
 		// 	}
 		// }
 
+		// 由于人的眼睛在每秒 10 - 12 帧就感觉到画面的连续性了
+		// 而现在发现发的过快，对方会处理不过来，那么是不是可以直接控制1秒平均多少张
 
 		if(get_f)
 		{
+			int ret = one_minute_allow_check(); // 
+			if (ret == 0) { // 时间上允许
+				// not need do anything
+			} else { // 时间上不允许
+				pic_clear_data(get_f);
+				get_f = NULL;
+				continue;
+			}
+
 			uint8_t *jpeg_buf_addr = NULL;
 			uint32_t total_len = 0;
 			uint32_t uint_len = 0;
@@ -1946,7 +2015,7 @@ static void _video_task(void* arg)
 					#ifdef I4S_SUPPORT_MULTI_USER
 							m_addr.sin_family = AF_INET;
 							m_addr.sin_port = htons(clients[active_client].img_port);
-							printf("picture port is %d\r\n", clients[active_client].img_port);
+							// printf("picture port is %d\r\n", clients[active_client].img_port);
 							m_addr.sin_addr = clients[active_client].addr;
 
 							//udp本身带有校验和，所以自己只需要加上 魔数就好了
@@ -2029,11 +2098,12 @@ RETRY_SEND:
 							// XXX 1.发送的长度没有问题
 							// send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
 							// 		(struct sockaddr *)&(m_addr), sizeof(struct sockaddr_in));
-							printf("send_byte is %d\r\n\n\n", send_byte);
+							printf("send_byte is %d\r\n", send_byte);
 					#else
 							send_byte = sendto(pctxd->connections.sockfd, jpg_header.ptk_ptr, jpg_header.ptklen, MSG_DONTWAIT,
 									(struct sockaddr *)&(pctxd->connections.addr), sizeof(struct sockaddr_in)); 
 					#endif
+							send_byte = 1; // 任何数据 不重发
 							timeouts++;
 							if(timeouts > 14) {				
 								I4SC_PRT("udp send failed last ,just can jump over this frame,trys counts:%d\r\n", timeouts);			
