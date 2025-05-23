@@ -1,0 +1,90 @@
+
+Google	浏览器
+
+Sublime	编辑工具
+
+Snipaste 截图工具
+
+电脑 wsl 安装 Ubuntu
+
+VPN	加速器
+
+文字内容搜索软件 AnyTXT Searcher
+
+cMake	项目管理工具
+
+Cmder	命令行工具
+
+Curl	网络工具
+
+draw.io	免费流程图编辑工具
+
+SumatraPDF	建议PDF阅读工具
+
+Everything	文件搜索工具
+
+Git	项目管理提交工具
+
+HbuilderX	HTML编辑工具
+
+火绒		电脑防病毒工具
+
+Hxd		破解软件	
+
+Java JDK
+
+mingw64 C语言编译工具
+
+Notepad	文本文件打开工具
+
+Vscode	代码编辑工具
+
+微信、QQ
+
+Nodejs
+
+Python
+
+Beyond Compare  Portable	比较工具
+
+Wireshark	网络抓包工具
+
+postman		网络调试工具
+
+sscom	串口工具
+
+vnotex	md编辑工具
+
+微信开发者工具
+
+mysql
+
+Navicate 数据库管理工具
+
+Source Insight	代码编辑工具
+
+腾讯会议
+
+钉钉
+
+Q_Dir	资源管理器工具
+
+TortoiseSVN	SVN工具
+
+WinRAR	解压缩工具 
+
+Vim		编辑工具
+
+wget	工具
+
+GUI-Guider-1.9.1-GA	LVGL 帮助工具
+
+ImageMagick		图片分帧工具
+
+lv_font_conv	lvgl字体文件生成工具
+
+
+
+
+
+
