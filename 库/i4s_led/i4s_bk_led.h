@@ -105,7 +105,7 @@ void i4s_bk_led_register(struct G_BK_LED led_arrays[]);
 void i4s_bk_led_thread_init(void);
 
 /* NOTE 启动一个线程 为led状态 运行 （这个功能如果不需要 可以不使用） */
-void i4s_led_def_by_youself(void);
+void i4s_led_def_by_youself(void); /* 启动线程 i4s_led_check_thread */
 
 void i4s_set_linght_mode_blink(struct G_BK_LED *led, uint8_t is_blink, uint16_t blink_count 
     , uint8_t basic_unit, uint8_t brignt_time, uint8_t dark_time);

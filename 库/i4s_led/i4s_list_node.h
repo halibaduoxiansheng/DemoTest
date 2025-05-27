@@ -3,35 +3,35 @@
 
 #include "stdio.h"
 
-enum INSERT_TYPE {
-	LED_TYPE = 0,
-	BUTTON_TYPE = 1,
+#define LIST_ADD_TYPE	(1)  /* 1: 使用头插法  0：尾插法 */
+
+enum RETURN_ARGS {
+	ERROR_NONE = 0,
+	ERROR_LOGIC = 1, /* 逻辑错误，混乱 */
+	ERROR_ARGS = 2,
+	ERROR_MALLOC = 3,
+
+	ERROR_MAX,
 };
 
-struct G_BK_Double_link{
-    uint8_t is_init:1;
-    uint8_t reserve:7;
-}__attribute__((packed));
-struct G_BK_Double_link bk_double_link;
+enum node_type {
+	TYPE_LED = 0,
+	TYPE_BUTTON,
 
-typedef struct Double_link_list{
-    struct G_BK_LED *led;
-	// struct G_BK_Button *button;
-	/* if you want add then add member in there */
-
-	uint8_t type; 
-
-	struct Double_link_list *prev;
-	struct Double_link_list *next;
-}Double_link_list_t;
-extern struct Double_link_list *bk_dlink_head;
-extern struct Double_link_list *bk_dlink_tail;
-/*  head->prev -> tail     tail->next -> head */
+	TYPE_MAX,
+};
 
 
-void i4s_bk_double_link_init(void);
-void i4s_bk_double_link_deinit(void);
-struct Double_link_list* double_button_link_insert(enum INSERT_TYPE type, void *data);
+
+uint8_t hali_link_list_init(void);
+
+uint8_t hali_link_list_deinit(void);
+
+uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_type type);
+
+/* 返回NULL就是没有找到 pos_start 为传入的开始位置 第一次使用传NULL */
+void *hali_link_list_traverse(enum node_type type, struct list_head *pos_start);
+
 
 
 #endif

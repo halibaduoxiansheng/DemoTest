@@ -1,87 +1,150 @@
 #include "i4s_list_node.h"
+#include "bk_list.h"
+
+/* 库中不要牵扯到 对应细节平台，目的是适配所有 Linux 平台 */
 
 
 
-struct Double_link_list *bk_dlink_head = NULL;
-struct Double_link_list *bk_dlink_tail = NULL;
-uint8_t button_structure_size = 0;
+struct node_base {
+	enum node_type type;
+	struct list_head list;
+};
 
-void i4s_bk_double_link_init(void)
+struct node_data {
+	struct node_base base;
+	void* data;
+}
+
+struct list_head mixed_list;
+
+static beken_mutex_t list_mutex; /* 适配BK 7258 平台 */
+static uint8_t hali_link_list_inited = 0;
+
+static inline void list_lock(void)
 {
-	if (bk_double_link.is_init == 0) {
-		bk_dlink_head = (struct Double_link_list *)os_malloc(sizeof(struct Double_link_list));
-		bk_dlink_tail = (struct Double_link_list *)os_malloc(sizeof(struct Double_link_list));
+	rtos_lock_mutex(&list_mutex);
+}
 
-		bk_dlink_head->prev = bk_dlink_tail;
-		bk_dlink_head->next = NULL;
+static inline void list_unlock(void)
+{
+	rtos_unlock_mutex(&list_mutex);
+}
 
-		bk_dlink_tail->next = bk_dlink_head;
-		bk_dlink_tail->prev = NULL;
-		bk_double_link.is_init = 1;
-	} else {
-		bk_printf("we already init double link list\r\n");
+static uint8_t check_type_validity(enum node_type type) {
+	if (type < 0 || type >= TYPE_MAX) {
+		return ERROR_ARGS;
 	}
+	return ERROR_NONE;
+}
+
+static void hali_free_all_mem(void)
+{
+    struct list_head *pos, *n;
+    struct node_base *base;
+    struct node_data *n_data;
+
+    list_for_each_safe(pos, n, &mixed_list) {
+        base = list_entry(pos, struct node_base, list);
+        n_data = container_of(base, struct node_data, base);
+
+        if (n_data && n_data->data) {
+            free(n_data->data);
+        }
+
+        list_del(pos);   // 正确删除节点
+        free(n_data);    // 释放整个结构体
+    }
 }
 
 
-void i4s_bk_double_link_deinit(void) /* Regardless of type， all deinit */
+uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_type type)
 {
-	if (bk_double_link.is_init == 0) {
-		printf("double link list not init\r\n");
-	} else {
-		struct Double_link_list *temp = bk_dlink_head->next;
-		while(temp) {
-			if (temp->next) {
-				temp = temp->next;
-				free(temp->prev);
-				temp->prev = NULL;
-			} else {
-				free(temp);
-				temp = NULL;
-			}
-		}
-		if (bk_dlink_head)
-			free(bk_dlink_head);
-		bk_dlink_head = NULL;
-		bk_double_link.is_init = 0;
+	if (!user_data || user_data_size <= 0 || check_type_validity(type)) {
+		return ERROR_ARGS;
 	}
+
+
+	if (type == TYPE_LED) {
+		struct node_data *node_d = (struct node_data *)malloc(sizoef(struct node_data));
+		if (!node_d) {
+			return ERROR_MALLOC;
+		}
+		node_d->data = (void *)malloc(user_data_size);
+		if (!(node_d->data)) {
+			free(node_d);
+			return ERROR_MALLOC;
+		}
+		memcpy(node_d->data, user_data, user_data_size);
+		node_d->base.type = type;
+		list_lock();
+#if LIST_ADD_TYPE /* 头插法 */
+		list_add(&node_d->base.list, &mixed_list);
+#else /* 尾插法 */
+		list_add_tail(&node_d->base.list, &mixed_list);
+#endif
+		list_unlock();
+	} else if (type == TYPE_BUTTON) {
+		/* TODO */
+	}
+
+	return ERROR_NONE;
 }
 
-struct Double_link_list* double_button_link_insert(enum INSERT_TYPE type, void *data)
+/* 返回NULL就是没有找到 pos_start 为传入的开始位置 第一次使用传NULL */
+void *hali_link_list_traverse(enum node_type type, struct list_head *pos_start)
 {
-	struct Double_link_list *temp = bk_dlink_head;
-	struct Double_link_list *node = NULL;
-
-	/* is this first node add to list */
-	if (bk_dlink_head->next == NULL && bk_dlink_tail->prev == NULL) { 
-		node = (struct Double_link_list*)malloc(sizeof(struct Double_link_list)); // the new add node
-		if (node == NULL) {
-			printf("malloc node failed\r\n");
-			return NULL;
-		}
-		bk_dlink_head->next = node;
-		bk_dlink_tail->prev = node;
-		node->prev = bk_dlink_head;
-		node->next = bk_dlink_tail;
-	} else {
-		node = (struct Double_link_list*)malloc(sizeof(struct Double_link_list)); // the new add node
-		while(temp->next != bk_dlink_tail) { // find the last one
-			temp = temp->next;
-		}
-		temp->next = node;
-		bk_dlink_tail->prev = node;
-		node->next = bk_dlink_tail;
-		node->prev = temp;
+	if (pos_start == NULL) { /* 没有给开始位置，就自定义开始位置 */
+		pos_start = mixed_list.next;
 	}
-
-	node->type = type; /* 这里可扩展 */
-
-	if (type == LED_TYPE) {
-		node->led = (struct G_BK_LED *)malloc(sizeof(struct G_BK_LED)); // never failed,if failed, just die
-		node->led = (struct G_BK_LED *)data;
+	if (pos_start == &mixed_list) {
+		return NULL;
 	}
-	return node;
+	struct node_data *n_data = NULL;
+
+    do {
+    	// TODO 
+        struct node_base *base = list_entry(pos_start, struct node_base, list);
+
+        if (type == base->type) {
+			n_data = container_of(base, struct node_data, base);
+			return n_data->data;
+        } else {
+        	pos_start = pos_start->next; /* 找不到，递归下一个 */
+        }
+    } while(pos_start != &mixed_list); /* 最多执行一轮询 */
+
+    pos_start = NULL;
+    return NULL;
 }
 
+
+
+uint8_t hali_link_list_init(void) 
+{
+	if (hali_link_list_inited) {
+		return ERROR_NONE;
+	}
+	hali_link_list_inited = 1;
+
+	INIT_LIST_HEAD(&mixed_list); /* TODO */
+	rtos_init_mutex(&list_mutex);
+
+	return ERROR_NONE;
+	
+}
+
+
+uint8_t hali_link_list_deinit(void) {
+	if (!hali_link_list_inited) {
+		return ERROR_LOGIC;
+	}
+	hali_link_list_inited = 0;
+
+	/* TODO 释放该释放的空间 */
+	hali_free_all_mem();
+	rtos_deinit_mutex(&list_mutex);
+	
+	return ERROR_NONE;
+}
 
 
