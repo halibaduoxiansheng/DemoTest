@@ -1,5 +1,12 @@
 #include "i4s_list_node.h"
-#include "bk_list.h"
+#include "stdio.h"
+#include "stdlib.h"
+#include "string.h"
+
+#include <os/os.h>
+#include <os/mem.h>
+
+#include "bk_uart.h"
 
 /* 库中不要牵扯到 对应细节平台，目的是适配所有 Linux 平台 */
 
@@ -13,7 +20,7 @@ struct node_base {
 struct node_data {
 	struct node_base base;
 	void* data;
-}
+};
 
 struct list_head mixed_list;
 
@@ -47,9 +54,10 @@ static void hali_free_all_mem(void)
         base = list_entry(pos, struct node_base, list);
         n_data = container_of(base, struct node_data, base);
 
-        if (n_data && n_data->data) {
-            free(n_data->data);
-        }
+        /* NOTE 如果是打算使用 链表存储副本的方式 可以保留下面的代码 */
+        // if (n_data && n_data->data) {  
+        //     free(n_data->data);
+        // }
 
         list_del(pos);   // 正确删除节点
         free(n_data);    // 释放整个结构体
@@ -57,6 +65,39 @@ static void hali_free_all_mem(void)
 }
 
 
+// uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_type type)
+// {
+// 	if (!user_data || user_data_size <= 0 || check_type_validity(type)) {
+// 		return ERROR_ARGS;
+// 	}
+
+
+// 	if (type == TYPE_LED) {
+// 		struct node_data *node_d = (struct node_data *)malloc(sizeof(struct node_data));
+// 		if (!node_d) {
+// 			return ERROR_MALLOC;
+// 		}
+// 		node_d->data = (void *)malloc(user_data_size);
+// 		if (!(node_d->data)) {
+// 			free(node_d);
+// 			return ERROR_MALLOC;
+// 		}
+// 		memcpy(node_d->data, user_data, user_data_size);
+// 		node_d->base.type = type;
+// 		list_lock();
+// #if LIST_ADD_TYPE /* 头插法 */
+// 		list_add_head(&node_d->base.list, &mixed_list);
+// #else /* 尾插法 */
+// 		list_add_tail(&node_d->base.list, &mixed_list);
+// #endif
+// 		list_unlock();
+// 	} else if (type == TYPE_BUTTON) {
+// 		/* TODO */
+// 	}
+
+// 	return ERROR_NONE;
+// }
+/* NOTE 上面的是直接存储的副本 下面的是存储的地址 */
 uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_type type)
 {
 	if (!user_data || user_data_size <= 0 || check_type_validity(type)) {
@@ -65,20 +106,15 @@ uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_t
 
 
 	if (type == TYPE_LED) {
-		struct node_data *node_d = (struct node_data *)malloc(sizoef(struct node_data));
+		struct node_data *node_d = (struct node_data *)malloc(sizeof(struct node_data));
 		if (!node_d) {
 			return ERROR_MALLOC;
 		}
-		node_d->data = (void *)malloc(user_data_size);
-		if (!(node_d->data)) {
-			free(node_d);
-			return ERROR_MALLOC;
-		}
-		memcpy(node_d->data, user_data, user_data_size);
+		node_d->data = user_data;
 		node_d->base.type = type;
 		list_lock();
 #if LIST_ADD_TYPE /* 头插法 */
-		list_add(&node_d->base.list, &mixed_list);
+		list_add_head(&node_d->base.list, &mixed_list);
 #else /* 尾插法 */
 		list_add_tail(&node_d->base.list, &mixed_list);
 #endif
@@ -91,29 +127,31 @@ uint8_t hali_link_list_add(void* user_data, uint16_t user_data_size, enum node_t
 }
 
 /* 返回NULL就是没有找到 pos_start 为传入的开始位置 第一次使用传NULL */
-void *hali_link_list_traverse(enum node_type type, struct list_head *pos_start)
+void *hali_link_list_traverse(enum node_type type, struct list_head **pos_start)
 {
-	if (pos_start == NULL) { /* 没有给开始位置，就自定义开始位置 */
-		pos_start = mixed_list.next;
+	if (*pos_start == NULL) { /* 没有给开始位置，就自定义开始位置 */
+		*pos_start = mixed_list.next;
 	}
-	if (pos_start == &mixed_list) {
+	if (*pos_start == &mixed_list) {
+		*pos_start = NULL; /* REVIEW 开始堵死在了这里 */
 		return NULL;
 	}
 	struct node_data *n_data = NULL;
 
     do {
     	// TODO 
-        struct node_base *base = list_entry(pos_start, struct node_base, list);
+        struct node_base *base = list_entry(*pos_start, struct node_base, list);
+
+        *pos_start = (*pos_start)->next;
 
         if (type == base->type) {
 			n_data = container_of(base, struct node_data, base);
 			return n_data->data;
-        } else {
-        	pos_start = pos_start->next; /* 找不到，递归下一个 */
         }
-    } while(pos_start != &mixed_list); /* 最多执行一轮询 */
+    } while(*pos_start != &mixed_list); /* 最多执行一轮询 */
 
-    pos_start = NULL;
+    // bk_printf("cycle a times\r\n");
+    *pos_start = NULL;
     return NULL;
 }
 
