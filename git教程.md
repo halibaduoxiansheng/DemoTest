@@ -30,6 +30,22 @@ git remote add origin git@github.com:halibaduoxiansheng/Repository/DemoTest.git
 git push -u origin master # 增加到主分支，第一次需要密码验证
 ```
 
+### tips
+```
+编写 .gitignore 文件
+**/build/
+*.o
+*.a
+*.elf
+*.map
+*.bin
+*.hex
+*.log
+**/gen/
+*.d
+然后git add . 防止 git add 失败
+```
+
 ### 之后更新提交
 
 ```
