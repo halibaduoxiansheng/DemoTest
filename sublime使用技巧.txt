@@ -27,3 +27,29 @@ Ctrl+shirt+/ 可以快速生成注释双包含  ==> /**/
 
 Ctrl+左键   点击上方的标签栏 可以分栏
 
+
+
+Sublime 必备插件
+BracketHighlighter —— 括号高亮
+Tag —— 补全代码
+A File Icon 
+DocBlockr
+Side Bar
+LSP
+SublimeLinter
+WordHighlight
+WhoCalled
+Terminus
+Emmet
+CTags
+SublimeCodeIntel
+LiveReload
+HTML/CSS/JS Prettify
+CodeMap
+C++11
+Localization
+All Autocomplete
+Alignment
+FileDiffs
+
+
