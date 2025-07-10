@@ -179,3 +179,22 @@ git checkout <commit_id> # ：将 HEAD 指向指定的提交，并将工作目�
 ```
 
 
+## github 增加子模块
+```
+# 用于提交大内容文件 从而拆分
+cd ..
+cd bk_avdk
+git init
+git submodule add git@github.com:halibaduoxiansheng/Bo_Tong_idk.git bk_idk
+git add .gitmodules bk_idk
+git commit -m "add bk_idk submodule"
+git remote add origin git@github.com:halibaduoxiansheng/Bo_Tong_avdk.git
+git push -u origin master
+```
+
+## 提示User 不对
+```
+# 类似这种做法
+git config --global --add safe.directory "D:/i4season_BoTong/armino/bk_aidk/bk_aidk" 
+```
+
