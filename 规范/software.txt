@@ -35,7 +35,7 @@ Java JDK
 
 mingw64 C语言编译工具
 
-Notepad	文本文件打开工具
+Notepad	文本文件打开工具  （必备插件 : Location Navigate && Mime tools && Npp Converter &&  NppExport ）
 
 Vscode	代码编辑工具
 
