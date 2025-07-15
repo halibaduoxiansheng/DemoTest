@@ -360,6 +360,7 @@ static uint8_t breath_dealwith(struct G_BK_LED *led)
 static void i4s_bk_led_hander(struct G_BK_LED **target) // 200ms
 {
     // bk_printf("%s:%d\r\n", __FUNCTION__, __LINE__);    
+    uint8_t led_func_flag = 1;
 
     if (*target == NULL) {
         return;
@@ -418,61 +419,65 @@ static void i4s_bk_led_hander(struct G_BK_LED **target) // 200ms
     // bk_printf("led->state is %d, led->brignt_time is %d, led->dark_time is %d, led->basic_unit is %d\r\n", led->state,
     //          led->brignt_time, led->dark_time, led->basic_unit);
     // bk_printf("led->active_level is %d\r\n", led->active_level);
-    if (led->is_blink) {
-        switch(led->state) {
-            case LED_IDLE:
-                led->state = LED_CHECK; /* NOTE 这里每次都会多走两轮 如果嫌弃费事 可以直接改这 */
-                break;
-            case LED_CHECK:
-                // start ticks base on current light level
-                if (led->is_light) {
-                    led->state = LED_LIGHT_CHECK;
-                } else {
-                    led->state = LED_DARK_CHECK;
-                }
-                break;
-            case LED_LIGHT_CHECK:
-                 led->state = LED_IDLE;
-                 // bk_printf("i4s_led_getLightTime(led) is %d\r\n", i4s_led_getLightTime(led));
-                 if (i4s_led_getLightTime(led) >= led->brignt_time) {
-                        // bk_printf("will turn off\r\n");
-                        led->need_level = !led->need_level;
-                        led->dark_ticks = 0;
-                        if (led->turn_off) {
-                            led->turn_off(led);
-                            led->is_light = 0;
-                        } else {
-                            // bk_printf("please check youself 3\r\n");
-                        }
-                        if (led->blink_count != I4S_BLINK_FOREVER) { // I4S_BLINK_FOREVER meaning forever
-                            led->blink_count--;
-                        }
-                 }
-                 break;
-            case LED_DARK_CHECK:
-                 led->state = LED_IDLE;
-                 // bk_printf("i4s_led_getDarkTime(led) is %d\r\n", i4s_led_getDarkTime(led));
-                 if (i4s_led_getDarkTime(led) >= led->dark_time) {
-                        // bk_printf("will turn on\r\n");
-                        led->need_level = !led->need_level;
-                        led->bright_ticks = 0;
-                        if (led->turn_on) {
-                            led->turn_on(led);
-                            led->is_light = 1;
-                        } else {
-                            // bk_printf("please check youself 2\r\n");
-                        }
-                 }
-                 break;
-            default:
-                led->state = LED_IDLE;
-                break;
-        }
-    } else { // not blink
-        if (led->set_light) {
-            led->set_light(led);
-        } else {
-            // bk_printf("please check youself 1\r\n");
+    while(led_func_flag) {
+        if (led->is_blink) {
+            switch(led->state) {
+                case LED_IDLE:
+                    led->state = LED_CHECK;
+                    continue;
+                case LED_CHECK:
+                    // start ticks base on current light level
+                    if (led->is_light) {
+                        led->state = LED_LIGHT_CHECK;
+                    } else {
+                        led->state = LED_DARK_CHECK;
+                    }
+                    continue;
+                case LED_LIGHT_CHECK:
+                     led->state = LED_IDLE;
+                     // bk_printf("i4s_led_getLightTime(led) is %d\r\n", i4s_led_getLightTime(led));
+                     if (i4s_led_getLightTime(led) >= led->brignt_time) {
+                            // bk_printf("will turn off\r\n");
+                            led->need_level = !led->need_level;
+                            led->dark_ticks = 0;
+                            if (led->turn_off) {
+                                led->turn_off(led);
+                                led->is_light = 0;
+                            } else {
+                                // bk_printf("please check youself 3\r\n");
+                            }
+                            if (led->blink_count != I4S_BLINK_FOREVER) { // I4S_BLINK_FOREVER meaning forever
+                                led->blink_count--;
+                            }
+                     }
+                     led_func_flag = 0; continue;
+                case LED_DARK_CHECK:
+                     led->state = LED_IDLE;
+                     // bk_printf("i4s_led_getDarkTime(led) is %d\r\n", i4s_led_getDarkTime(led));
+                     if (i4s_led_getDarkTime(led) >= led->dark_time) {
+                            // bk_printf("will turn on\r\n");
+                            led->need_level = !led->need_level;
+                            led->bright_ticks = 0;
+                            if (led->turn_on) {
+                                led->turn_on(led);
+                                led->is_light = 1;
+                            } else {
+                                // bk_printf("please check youself 2\r\n");
+                            }
+                     }
+                     led_func_flag = 0; continue;
+                default:
+                    led->state = LED_IDLE;
+                    led_func_flag = 0; continue;
+            }
+        } else { // not blink
+            if (led->set_light) {
+                led->set_light(led);
+                led_func_flag = 0; continue;
+            } else {
+                led_func_flag = 0; continue;
+                // bk_printf("please check youself 1\r\n");
+            }
         }
     }
 }
