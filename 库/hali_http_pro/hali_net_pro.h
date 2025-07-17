@@ -52,6 +52,16 @@ enum _NET_MODES {
 	HALI_MODE_MAX,
 };
 
+enum _HALI_URL_TYPE {
+	HALI_URL_NONE,
+
+	HALI_HTTP_S_TYPE,
+	HALI_WS_S_TYPE,
+	HALI_MQTT_S_TYPE,
+
+	HALI_URL_MAX,
+}
+
 enum _NET_FAMILYS {
 	HALI_FAMILY_NONE = 0,
 
@@ -177,7 +187,7 @@ int hali_net_pro_udp_recv(hali_net_Info_t *info);
 
 
 /*_______________    Http/Https Module _______________*/
-int hali_net_pro_set_url(hali_net_Info_t *info, char *url);
+int hali_net_pro_set_url(hali_net_Info_t *info, char *url, enum _HALI_URL_TYPE type);
 int hali_net_pro_set_request_method(hali_net_Info_t *info, enum _NET_HTTP_METHODS method);
 int hali_net_pro_set_send_timeout(hali_net_Info_t *info, int timeout); // millisecond
 int hali_net_pro_set_recv_timeout(hali_net_Info_t *info, int timeout);
@@ -203,6 +213,7 @@ int hali_net_pro_set_send_body(hali_net_Info_t *info, char *body_content, int si
 int hali_net_pro_get_recv_header(hali_net_Info_t *info, char *header_content, int size);
 int hali_net_pro_get_recv_body(hali_net_Info_t *info, char *body_content, int size);
 
+int Websocket_establish(hali_net_Info_t *info);
 
 #ifdef __cplusplus
 }

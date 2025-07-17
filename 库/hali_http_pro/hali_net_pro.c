@@ -82,6 +82,21 @@ enum HALI_SELECT_type {
 #define HTTP_S_SEND_BODY_SIZE 1024
 #define HTTP_S_RECV_BODY_SIZE 4096
 
+// url default header str
+#define HALI_URL_DEFAULT_HTTP_HEAD "http://"
+#define HALI_URL_DEFAULT_HTTPS_HEAD "https://"
+#define HALI_URL_DEFAULT_WS_HEAD	"ws://"
+#define HALI_URL_DEFAULT_WSS_HEAD	"wss://"
+#define HALI_URL_DEFAULT_MQTT_HEAD "tcp://"
+#define HALI_URL_DEFAULT_MQTTS_HEAD "ssl://"
+
+// url default port
+#define HALI_URL_DEFAULT_HTTP_PORT 80
+#define HALI_URL_DEFAULT_HTTPS_PORT 443
+#define HALI_URL_DEFAULT_WS_PORT 1883
+#define HALI_URL_DEFAULT_WSS_PORT 8883
+#define HALI_URL_DEFAULT_MQTT_PORT 1883
+#define HALI_URL_DEFAULT_MQTTS_PORT 8883
 
 static void hali_ver_print(void)
 {
@@ -156,6 +171,14 @@ static inline int prtol_check_validity(int prtol)
 
 static inline int accept_check_validity(int accept_type) {
 	if (accept_type > HALI_ACCEPT_NONE && accept_type < HALI_ACCEPT_MAX) {
+		return HALI_FLAG_ONE;
+	} else {
+		return HALI_FLAG_ZERO;
+	}
+}
+
+static inline int type_check_validity(int type) {
+	if (type > HALI_URL_NONE && type < HALI_URL_MAX) {
 		return HALI_FLAG_ONE;
 	} else {
 		return HALI_FLAG_ZERO;
@@ -305,7 +328,7 @@ static int hali_http_send(hali_net_Info_t *info)
 
 }
 
-char *strcasestr(const char *haystack, const char *needle) {
+static char *strcasestr(const char *haystack, const char *needle) {
 	int i = 0;
     if (!haystack || !needle) return NULL;
 
@@ -326,6 +349,18 @@ char *strcasestr(const char *haystack, const char *needle) {
     }
 
     return NULL;
+}
+
+static void fill_random(void *buf, size_t len)
+{
+	unsigned char *buf_bytes = (uint8_t *)buf;
+	while (len > 0) {
+		uint32_t word = (uint32_t)rand();
+		uint32_t to_copy = MIN(sizeof(word), len);
+		memcpy(buf_bytes, &word, to_copy);
+		buf_bytes += to_copy;
+		len -= to_copy;
+	}
 }
 
 static int hali_http_send_timeout_do(hali_net_Info_t *info)
@@ -863,17 +898,19 @@ static int hali_net_socket_init(hali_net_Info_t *info, int proto)
 static int hali_select(hali_net_Info_t *info, enum HALI_SELECT_type type) 
 {
 	int ret = 0;
-	fd_set writefds;
+	fd_set writefds, readfds;
     struct timeval timeout;
-	FD_ZERO(&writefds);
-    FD_SET(info->sockfd, &writefds);
 
     timeout.tv_sec = HALI_SELECT_SOCKET_TIMEOUT / 1000;  // 超时时间
     timeout.tv_usec = (HALI_SELECT_SOCKET_TIMEOUT % 1000) * 1000;
 
 	if (type == HALI_SELECT_READABLE) {
+		FD_ZERO(&readfds);
+    	FD_SET(info->sockfd, &readfds);
 		ret = select(info->sockfd + 1, &readfds, NULL, NULL, &timeout);
 	} else if (type == HALI_SELECT_WRITABLE) {
+		FD_ZERO(&writefds);
+    	FD_SET(info->sockfd, &writefds);
     	ret = select(info->sockfd + 1, NULL, &writefds, NULL, &timeout);
 	} else {
 		return HALI_RETURN_ERROR;
@@ -1028,8 +1065,32 @@ static int hali_net_pro_header_auto_for_post(hali_net_Info_t *info) // TODO
 	return HALI_RETURN_OK;
 }
 
+static void url_default_args_ensure(int type, char *url_head_str, char *url_head_s_str, int *url_default_port, int *url_default_s_port)
+{
+	if (type == HALI_HTTP_S_TYPE) {
+		memcpy(url_head_str, HALI_URL_DEFAULT_HTTP_HEAD, strlen(HALI_URL_DEFAULT_HTTP_HEAD));
+		memcpy(url_head_s_str, HALI_URL_DEFAULT_HTTPS_HEAD, strlen(HALI_URL_DEFAULT_HTTPS_HEAD));
+		*url_default_port = HALI_URL_DEFAULT_HTTP_PORT;
+		*url_default_s_port = HALI_URL_DEFAULT_HTTPS_PORT;
+	} else if (type == HALI_WS_S_TYPE) {
+		memcpy(url_head_str, HALI_URL_DEFAULT_WS_HEAD, strlen(HALI_URL_DEFAULT_WS_HEAD));
+		memcpy(url_head_s_str, HALI_URL_DEFAULT_WSS_HEAD, strlen(HALI_URL_DEFAULT_WSS_HEAD));
+		*url_default_port = HALI_URL_DEFAULT_WS_PORT;
+		*url_default_s_port = HALI_URL_DEFAULT_WSS_PORT;
+	} else if (type == HALI_MQTT_S_TYPE) {
+		memcpy(url_head_str, HALI_URL_DEFAULT_MQTT_HEAD, strlen(HALI_URL_DEFAULT_MQTT_HEAD));
+		memcpy(url_head_s_str, HALI_URL_DEFAULT_MQTTS_HEAD, strlen(HALI_URL_DEFAULT_MQTTS_HEAD));
+		*url_default_port = HALI_URL_DEFAULT_MQTT_PORT;
+		*url_default_s_port = HALI_URL_DEFAULT_MQTTS_PORT;
+	}
+}
+
 int hali_connect(hali_net_Info_t *info)
 {
+	if (info == NULL) {
+		HALI_NET_DEBUG_L0("%s -> args is invalid\r\n", TAG);
+		return HALI_RETURN_INVALID_ARGS;
+	}
 	int ret = -1;
 	
 	if (info->family == HALI_FAMILY_IPV4) {
@@ -1469,15 +1530,18 @@ int hali_net_pro_udp_recv(hali_net_Info_t *info) // 接收一个UDP包
 }
 
 /*_______________    Http/Https Module _______________*/
-int hali_net_pro_set_url(hali_net_Info_t *info, char *url)
+int hali_net_pro_set_url(hali_net_Info_t *info, char *url, enum _HALI_URL_TYPE type)
 {
-	if (info == NULL || url == NULL) {
+	if (info == NULL || url == NULL || type_check_validity(type) != HALI_FLAG_ONE) {
 		HALI_NET_DEBUG_L0("%s -> args is invalid\r\n", TAG);
 		return HALI_RETURN_INVALID_ARGS; 
 	}
 
 	int len = 0;
 	char *p_left = NULL, *p_right = NULL;
+	char url_head_str[8] = {0}, url_head_s_str = {0};
+	int url_default_port , url_default_s_port;
+	url_default_args_ensure(type, url_head_str, url_head_s_str, &url_default_port, &url_default_s_port);
 
 	hali_url_parse_safe_strdup(info);
 
@@ -1487,12 +1551,12 @@ int hali_net_pro_set_url(hali_net_Info_t *info, char *url)
 	}
 	p_left = p_right = info->url;
 
-	if (strncmp(info->url, "http://", strlen("http://")) == 0) {
-		info->ssl = 0; p_left += strlen("http://");
+	if (strncmp(info->url, url_head_str, strlen(url_head_str)) == 0) {
+		info->ssl = 0; p_left += strlen(url_head_str);
 		p_right = p_left;
 		p_right = strchr(p_left, ':');
 		if (p_right == NULL) {
-			info->send_port = 80;
+			info->send_port = url_default_port;
 			p_right = strchr(p_left, '/');
 			if (p_right == NULL) {
 				return HALI_RETURN_INVALID_ARGS;
@@ -1516,12 +1580,12 @@ int hali_net_pro_set_url(hali_net_Info_t *info, char *url)
 				return HALI_RETURN_ERROR;
 			}
 		}
-	} else if (strncmp(info->url, "https://", strlen("https://")) == 0) {
-		info->ssl = 1; p_left += strlen("https://");
+	} else if (strncmp(info->url, url_head_s_str, strlen(url_head_s_str)) == 0) {
+		info->ssl = 1; p_left += strlen(url_head_s_str);
 		p_right = p_left;
 		p_right = strchr(p_left, ':');
 		if (p_right == NULL) {
-			info->send_port = 443;
+			info->send_port = url_default_s_port;
 			p_right = strchr(p_left, '/');
 			if (p_right == NULL) {
 				return HALI_RETURN_INVALID_ARGS;
@@ -1987,6 +2051,49 @@ int hali_net_pro_set_accept_type(hali_net_Info_t *info, enum _NET_ACCEPT_type ac
 	return HALI_RETURN_ERROR;
 }
 
+static int hali_net_pro_parse_websocket_establish_package(hali_net_Info_t *info, unsigned char *client_key)
+{
+	char *p_left = NULL, p_right = NULL;
+
+	p_left = strcasestr(info->recv_header, "Sec-WebSocket-Accept");
+	if (p_left == NULL) {
+		HALI_NET_DEBUG_L1("%s -> package is not complete\r\n", TAG);
+		goto _err;
+	} else {
+		p_right = strcasestr(p_left, "\r\n");
+		if (p_right == NULL) {
+			HALI_NET_DEBUG_L1("%s -> package is not complete\r\n", TAG);
+			goto _err;
+		} else {
+			p_right = '\0';
+			char *server_key = hali_strdup(p_left + (p_right - p_left));
+
+			size_t outlen;
+			unsigned char expected_server_sha1[20] = {0};
+			unsigned char expected_server_key[33] = {0};
+
+			// NOTE 1.先对本地的key SHA-1 哈希计算 2.然后进行Base64编码
+			mbedtls_sha1_ret(client_key, strlen(client_key), expected_server_sha1);
+			mbedtls_base64_encode(expected_server_key, sizeof(expected_server_key),  &outlen, expected_server_sha1, sizeof(expected_server_sha1));
+
+			if (strmcp(expected_server_key, server_key) != 0) {
+				HALI_NET_DEBUG_L0("%s -> server key is error\r\n", TAG);
+				goto _err;
+			}
+		}
+	}
+
+	if (server_key) {
+		hali_free(server_key);
+	}
+	return HALI_RETURN_OK;
+_err:
+	if (server_key) {
+		hali_free(server_key);
+	}
+	return HALI_RETURN_ERROR;
+}
+
 /*_______________    Init/Deinit Module _______________*/
 
 /**
@@ -2039,5 +2146,59 @@ int hali_net_pro_deinit(hali_net_Info_t *info)
 	hali_net_pro_http_disconnect(info);
 
 	memset(info, 0, sizeof(hali_net_Info_t));
+	return HALI_RETURN_OK;
+}
+
+int Websocket_establish(hali_net_Info_t *info)
+{
+	if (info == NULL) {
+		HALI_NET_DEBUG_L0("%s -> args is invalid\r\n", TAG);
+		return HALI_RETURN_INVALID_ARGS;
+	}
+	int ret = 0;
+	unsigned char random_key[16]; // len must >= 16
+	unsigned char client_key[28] = {0};
+	size_t outlen;
+
+	fill_random(random_key, sizeof(random_key));
+
+	hali_net_pro_set_request_method(info, HALI_METHOD_GET);
+
+	if (hali_connect(info) != HALI_RETURN_OK) {
+		HALI_NET_DEBUG_L0("connect failed,can not establish websocket\r\n");
+		return HALI_RETURN_ERROR;
+	}
+
+	// NOTE 此处使用默认随机 客户端握手本地密钥
+	mbedtls_base64_encode(client_key, sizeof(client_key), &outlen, random_key, sizeof(random_key));
+
+	memset(info->send_header, 0, info->send_header_max_size);
+
+	os_snprintf(info->send_header, info->send_header_max_size, 
+					"GET %s HTTP/1.1\r\n"
+					"Upgrade: websocket\r\n"
+					"Connection: Upgrade\r\n"
+					"Host: %s\r\n"
+					"Origin: http://%s\r\n"
+					"Sec-Websocket-Key: %s\r\n"
+					"Sec-WebSocket-Version: 13\r\n",
+					info->path, info->host, info->url, client_key
+					);
+
+	if (hali_net_pro_http_send(info) != HALI_RETURN_OK) {
+		HALI_NET_DEBUG_L0("%s -> establish websocket send failed\r\n\r\n", TAG);
+		return HALI_RETURN_ERROR;
+	}
+
+	if (hali_net_pro_http_recv(info) != HALI_RETURN_OK) {
+		HALI_NET_DEBUG_L0("%s -> establish websocket no receive\r\n\r\n", TAG);
+		return HALI_RETURN_ERROR;
+	}
+
+	if (hali_net_pro_parse_websocket_establish_package(info, client_key) != HALI_RETURN_OK) {
+		HALI_NET_DEBUG_L0("%s -> key check error\r\n", TAG);
+		return HALI_RETURN_ERROR;
+	}
+
 	return HALI_RETURN_OK;
 }
