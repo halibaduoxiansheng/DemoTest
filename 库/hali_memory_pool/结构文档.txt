@@ -1,0 +1,31 @@
+模块：hali_memory_pool
+功能：线程池 
+实现：未采用常见的分块化结构，更是根据所需空间大小，动态组建——块链表
+	优点：1.小数量大需求情况下，对于头的占用减少 2.避免了分块导致的分配大小>需求大小的问题
+	缺点：
+
+
+结构体：
+struct Hali_SubModule_Pool {
+	struct Hali_SubModule_Pool *next; /* 指向下一个可用内存块的位置，为NULL就是没有下一个 */
+
+	uint16_t module_size; /* 该内存区域块的大小 ，柔性数组指向空间的大小 */
+	unsigned char used; /* 该内存区域是否有使用 */
+	unsigned char reserved;
+
+	unsigned char *data[]; /* 柔性数组，指向真实可分配使用空间 */
+};
+
+一个块的架构
+头 + data
+
+头的构成：
+4Bytes	——	*next
+2Bytes	——	module_size
+1Bytes	——	used
+1Bytes	——	reserved
+
+我们暂且将一个“ 头 + data ”的结构称为块
+当 块 与 块相邻时，会判断是否可以融合，即将两个块融合为一个块，从而节省对 头 的开支
+
+请求空间，分配大小时，也会尽量分配给合适的块供给，以免导致内存池碎片化
