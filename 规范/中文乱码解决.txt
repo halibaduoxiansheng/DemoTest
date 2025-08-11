@@ -1,2 +1,8 @@
 掺和一嘴：cmd下运行exe文件，中文的输出语句会乱码：
 输入：chcp 65001后就不会了
+
+
+vscode 主题推荐
+Omni Dracula VSCode Theme
+如果说只修改了一部分
+将 settting.json中设置颜色的那个字段删除掉
