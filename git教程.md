@@ -214,3 +214,10 @@ git pull # 获取最新内容到本地
 git branch -r 或 git branch -a # 查看所有分支
 ```
 
+## 最为常用的
+```
+git stash # 暂存所有本地修改数据
+git pull # 更新为最新的服务器上代码
+git stash pop # 恢复
+```
+
