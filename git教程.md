@@ -198,3 +198,19 @@ git push -u origin master
 git config --global --add safe.directory "D:/i4season_BoTong/armino/bk_aidk/bk_aidk" 
 ```
 
+## 实际工作中常用
+```
+git status # 查看当前修改了什么
+git branch # 查看当前所处分支
+git branch -d dev # 删除dev分支
+git checkout dev # 切换到dev分支
+git submodule update --init # 更新子模块
+git log # 查看日志
+git show <commit-id> # 查看具体修改了什么
+git reset --hard # 丢弃所有本地修改
+git clone -b dev # clone dev 分支的内容到本地
+git remote -v # 查看当前仓库的地址
+git pull # 获取最新内容到本地
+git branch -r 或 git branch -a # 查看所有分支
+```
+
