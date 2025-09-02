@@ -221,3 +221,10 @@ git pull # 更新为最新的服务器上代码
 git stash pop # 恢复
 ```
 
+## 提交代码
+```
+git checkout -b bugfix/描述 # 基于本分支创建新分支
+git push # 提交
+然后请求合并
+```
+
