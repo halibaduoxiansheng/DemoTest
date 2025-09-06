@@ -1,0 +1,14 @@
+# 进入项目目录
+cd project_directory
+
+# 编译所有源文件
+客户端：gcc -o client client.c -lws2_32
+服务器端：gcc -o server server.c -lws2_32
+
+# 运行可执行文件
+ * .\server.exe
+ * .\client.exe
+ 
+ server1和client1是改进版本
+
+
