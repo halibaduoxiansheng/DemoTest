@@ -228,3 +228,57 @@ git push # 提交
 然后请求合并
 ```
 
+
+
+
+## 以下为公司实际使用中所学
+查看当前分支
+git branch
+切换分支
+git checkout dev # 切换到dev分支
+查看所有分支
+git branch -r # 按q退出
+基于当前分支创建分支
+一般提交代码，是基于什么分支创建的，就请求合并到什么分支
+git checkout -b feature/change_pd336_sdk_version
+git checkout -b bugfix/fix_wifi_start_step
+删除分支
+注意：无法删除当前正处分支
+git branch -d bugfix/fix_wifi_start_step
+创建分支
+基于当前分支内容，复制一份，成为新的分支
+git checkout -b bugfix/fix_wifi_start_step
+同步服务器代码
+git fetch
+git pull
+查看commit一致性
+git log
+查看当前git仓库
+git remote -v
+提交
+将暂存区的内容提交到本地仓库
+git commit -m "first commit"
+推送
+将本地仓库的提交推送到远程仓库
+git push 
+同步代码
+挑选一个 commit 应用到当前分支，如果有歧义，会提示
+git cherry-pick <commit-id>
+提交代码 小修改 GIT
+当已经提交合并的代码，有人提出问题且你对应修复后，为了步增加一个commit，可以直接
+git reset <commit-id> # 回复到某一个代码
+然后对新生成的进行修改
+git add .
+git commit
+git push -f
+回到过去的某个修改，且强制修改
+谨慎使用，强制修改会将本地的修改全部丢弃，且无法恢复
+git reset --hard <commit-id>
+切换其余分支或commit，但又需要保存本地修改的
+git stash push -m "commit reason"
+git stash list # 打印所有暂存
+git stash pop stash@{1} # 弹出第一个修改,并删除这个
+git stash apply pop stash@{1} # 弹出第一个修改
+git stash drop stash@{1} # 删除第一个修改
+git stash clear # 清除所有
+
