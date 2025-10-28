@@ -93,4 +93,6 @@ anyTxt 文本搜索软件
 
 notepad安装插件 AnalysePlugin插件 帮助使用这个插件
 
+看日志 -> SSCOM , MobaXterm 软件
+
 
