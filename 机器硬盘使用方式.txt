@@ -2,4 +2,29 @@
 先接上电源，等待机器硬盘稳定，再接数据线
 
 断开
+
 先安全弹出，稳定后，先拔数据线，再拔电源
+
+
+
+
+新增 链表功能
+<- 为 prev
+-> 为 next
+依次想空链表中插入 new_0、new_1、new_2
+
+头插法
+head <-> new_2 <-> new_1 <-> new_0 <-> head
+
+尾插法
+head <-> new_0 <-> new_1 <-> new_2 <-> head
+
+static _EF_INLINE void ef_list_add(ef_list_t *p_new, ef_list_t *p_head)
+{
+    __ef_list_add(p_new, p_head, p_head->next);
+}
+
+static _EF_INLINE void ef_list_add_tail(ef_list_t *p_new, ef_list_t *p_head)
+{
+    __ef_list_add(p_new, p_head->prev, p_head);
+}
