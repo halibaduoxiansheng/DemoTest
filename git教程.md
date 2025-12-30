@@ -245,6 +245,7 @@ git checkout -b bugfix/fix_wifi_start_step
 删除分支
 注意：无法删除当前正处分支
 git branch -d bugfix/fix_wifi_start_step
+git branch -D bugfix/fix_wifi_start_step # 强制
 创建分支
 基于当前分支内容，复制一份，成为新的分支
 git checkout -b bugfix/fix_wifi_start_step
@@ -264,13 +265,19 @@ git push
 同步代码
 挑选一个 commit 应用到当前分支，如果有歧义，会提示
 git cherry-pick <commit-id>
-提交代码 小修改 GIT
+下载代码
+git clone -b master <repository> #当然，其中的-b master 可以不用
+修改未合并的代码 小修改 GIT(不增加新的commit)
 当已经提交合并的代码，有人提出问题且你对应修复后，为了步增加一个commit，可以直接
+git reset --soft HEAD~1 # 选用，撤销上个提交
+
 git reset <commit-id> # 回复到某一个代码
 然后对新生成的进行修改
 git add .
-git commit
+git commit --amend
 git push -f
+修改未push的commit的备注内容
+git commit --amend
 回到过去的某个修改，且强制修改
 谨慎使用，强制修改会将本地的修改全部丢弃，且无法恢复
 git reset --hard <commit-id>
@@ -281,4 +288,24 @@ git stash pop stash@{1} # 弹出第一个修改,并删除这个
 git stash apply pop stash@{1} # 弹出第一个修改
 git stash drop stash@{1} # 删除第一个修改
 git stash clear # 清除所有
+
+强制恢复，将未提交的commit丢弃
+git reset --hard origin/release/v2.2.0 
+撤销提交
+git reset --soft HEAD^ # 改动还在工作区
+git reset --hard HEAD^ # 彻底回到上个提交的状态
+git reset --soft HEAD~3 # 回退最近3个提交，但是仍然保留修改
+删除分支
+git push origin --delete feature/test # 删除远端分支
+git branch -D feature/test # 删除本地分支
+变换到某commit-id
+git reset --hard <commit-id>
+或则
+git checkout <commit-id>
+git rev-parse HEAD # 查看当前commit-id
+显示默认分支
+git remote show origin
+遇到无法撤销的暂存
+git reset HEAD . # 直接取消所有暂存
+
 
