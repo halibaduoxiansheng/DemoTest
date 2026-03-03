@@ -55,3 +55,27 @@ Alignment
 FileDiffs
 
 
+（需要先安转 SublimeCodeIntel）
+配置鼠标跳转，返回
+在 Perferences -> Browse Packages 的 资源管理器中 打开 Users
+有则修改，无则新建 Default.sublime-mousemap 文件，内容为
+[
+	{
+		"button": "button2",
+		"count": 1,
+		"modifiers": ["ctrl"],
+		"command": "jump_back"
+	},
+
+
+	{
+		"button": "button1",
+		"count": 1,
+		"modifiers": ["ctrl"],
+		"press_command": "drag_select",
+		"command": "goto_definition"
+	}
+]
+
+
+
