@@ -76,6 +76,12 @@ FileDiffs
 		"command": "goto_definition"
 	}
 ]
+重点必安装插件：
+SublimeCodeIntel
+A File Icon
+BracketHeighter
+CTags （可以本地下个ctag，安装路径配置上去）
+TodoReview
 
 
 
