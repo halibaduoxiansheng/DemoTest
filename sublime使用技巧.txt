@@ -82,6 +82,6 @@ A File Icon
 BracketHeighter
 CTags （可以本地下个ctag，安装路径配置上去）
 TodoReview
-
-
+Terminal
+DocBlockr
 
