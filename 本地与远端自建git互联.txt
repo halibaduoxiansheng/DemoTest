@@ -1,0 +1,29 @@
+文档只教如何保存已经为git环境的项目
+
+1.在远端自建git环境
+git init
+
+2.配置
+git config --global --add safe.directory "*"
+git config receive.denyCurrentBranch ignore
+git config --global --add safe.directory "*"
+（这些配置两段都可以配置）
+
+3.将内容放进去（复制还是拖拽什么的）
+
+4.git add .
+
+5.git submodule add Z:\Code_Git\wangjie\LeXin_EchoEar\esp-brookesia esp-brookesia
+模仿类似操作，将里面的已经为git的项目定义为子仓
+
+6.（第5步报错可选）
+git rm --cached -r esp-brookesia
+再继续第5步操作
+
+7.git commit -am "Add esp-brookesia as submodule"
+
+// 下面为本地操作
+
+8.新建文件夹 git clone 地址(git地址或文件夹地址)
+
+9.git submodule update --init
