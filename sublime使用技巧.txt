@@ -29,7 +29,9 @@ Ctrl+K+B 关闭、开启左侧边栏
 
 Ctrl+左键   点击上方的标签栏 可以分栏
 
-
+Ctrl+Shift+/ 快速生成备注框框
+搜索内容可以使用 正则表达式
+Ctrl+P 可以直接搜索文件 并可以选择带有 :<行号>
 
 Sublime 必备插件
 BracketHighlighter —— 括号高亮
