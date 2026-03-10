@@ -56,6 +56,7 @@ All Autocomplete
 Alignment
 FileDiffs
 
+如果突然使用不了全局搜索了，要么看一看是不是转换了输入法导致了 (Ctrl+Shift)
 
 （需要先安转 SublimeCodeIntel）
 配置鼠标跳转，返回
