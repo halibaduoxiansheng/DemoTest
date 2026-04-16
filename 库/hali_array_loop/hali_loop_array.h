@@ -5,9 +5,12 @@
 extern "C" {
 #endif
 #include "stdio.h"
+#include <stdint.h>
 
 #define HALI_LOOP_ARRAY_USE_MUTEX	0 // 是否支持使用 锁
-#define HALI_LOOP_ARRAY_SELF_TEST	0 // 自测开关
+#define HALI_LOOP_ARRAY_SELF_TEST	1 // 自测开关
+
+#define HALI_LOOP_ARRAY_
 
 #if HALI_LOOP_ARRAY_SELF_TEST
 typedef unsigned char uint8_t;
@@ -26,7 +29,9 @@ typedef struct _hali_loop_array {
 #if HALI_LOOP_ARRAY_USE_MUTEX
 	void* mutex;
 #endif
-}_hali_loop_array_t;
+
+	uint8_t enable_part_write;
+} _hali_loop_array_t;
 
 /**
  * 环形缓冲区初始化 
@@ -35,7 +40,7 @@ typedef struct _hali_loop_array {
  * @param initSize      缓冲区存储内容可用大小
  * @return   =0:Success	!=0:Failed
  */
-int hali_loop_array_init(_hali_loop_array_t *array, unsigned char *start_address, uint32_t initSize);
+int hali_loop_array_init(_hali_loop_array_t *array, unsigned char *start_address, uint32_t initSize, uint8_t enable_part_write);
 
 /**
  * 环形缓冲区反初始化

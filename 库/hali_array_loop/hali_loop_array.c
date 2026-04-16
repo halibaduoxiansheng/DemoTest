@@ -26,6 +26,15 @@ enum HALI_LP_RETURN {
  #define HALI_LOOP_DEBUG_L1 
 #endif
 
+#ifndef true
+#define true 1
+#endif
+
+#ifndef false
+#define false 0
+#endif
+
+
 /*_______________    Mutex Module _______________*/
 #if HALI_LOOP_ARRAY_USE_MUTEX
 static inline void hali_loop_array_lock_init(void* mutex)
@@ -142,8 +151,29 @@ int hali_loop_array_write(_hali_loop_array_t *array, unsigned char* src_start_ad
 		hali_loop_array_unlock(array->mutex);
 #endif
 	} else {
-		HALI_LOOP_DEBUG_L1("array free size is not enough[%d->%d]\r\n", array_freeSize, copySize);
-		return HALI_RETURN_ERROR;
+		if (!array->enable_part_write) {
+			HALI_LOOP_DEBUG_L1("array free size is not enough[%d->%d]\r\n", array_freeSize, copySize);
+			return HALI_RETURN_ERROR;
+		} else {
+#if HALI_LOOP_ARRAY_USE_MUTEX
+		hali_loop_array_lock(array->mutex);
+#endif
+		array_right_writable_len = array->maxSize - array->wpos;
+		if (array_right_writable_len == array_freeSize) {
+			memcpy(&array->data[array->wpos], src_start_address, array_right_writable_len);
+			array->wpos += array_right_writable_len;
+		} else {
+			memcpy(&array->data[array->wpos], src_start_address, array_right_writable_len);
+			remain_left_writable_len = array_freeSize - array_right_writable_len;
+			memcpy(&array->data[0], src_start_address + array_right_writable_len, remain_left_writable_len);
+			array->wpos = remain_left_writable_len;
+		}
+
+		array->full_1_empty_0 = 1; /* NOTE 记录下是填充满导致的 wpos == rpos */
+#if HALI_LOOP_ARRAY_USE_MUTEX
+		hali_loop_array_unlock(array->mutex);
+#endif
+		}
 	}
 
 	return (int)copySize;
@@ -183,7 +213,7 @@ int hali_loop_array_read(_hali_loop_array_t *array, unsigned char* store_start_a
 		array->rpos = remain_left_readable_len;
 	}
 
-	if (array->wpos == array->rpos) {
+	if (array->wpos == array->rpos) { // TODO 是否只要是能写就是可以赋值为0了？
 		array->full_1_empty_0 = 0; /* NOTE 记录下是读空导致的 wpos == rpos */
 	}
 #if HALI_LOOP_ARRAY_USE_MUTEX
@@ -216,7 +246,7 @@ int hali_loop_array_clear(_hali_loop_array_t *array)
 }
 
 
-int hali_loop_array_init(_hali_loop_array_t *array, unsigned char *start_address, uint32_t initSize)
+int hali_loop_array_init(_hali_loop_array_t *array, unsigned char *start_address, uint32_t initSize, uint8_t enable_part_write)
 {
 	if (!array || !start_address) {
 		HALI_LOOP_DEBUG_L0("%s -> please check args validity\r\n", TAG);
@@ -234,6 +264,7 @@ int hali_loop_array_init(_hali_loop_array_t *array, unsigned char *start_address
 	array->data = start_address;
 	array->maxSize = initSize;
 	array->full_1_empty_0 = array->wpos = array->rpos = 0;
+	array->enable_part_write = enable_part_write;
 
 	array->inited = 1;
 
@@ -255,10 +286,7 @@ int hali_loop_array_deinit(_hali_loop_array_t *array)
 	hali_loop_array_lock_deinit(&array->mutex);
 #endif	
 
-	array->data = NULL;
-	array->full_1_empty_0 = array->maxSize = array->wpos = array->rpos = 0;
-
-	array->inited = 0;
+	memset(array, 0x0, sizeof(_hali_loop_array_t));
 
 	return HALI_RETURN_OK;
 }
@@ -266,13 +294,13 @@ int hali_loop_array_deinit(_hali_loop_array_t *array)
 #if HALI_LOOP_ARRAY_SELF_TEST
 int main(void)
 {
-	uint8_t data0[10], data1[10];
-	_hali_loop_array_t array[2] = {0};
+	uint8_t data0[11] = {0}, data1[11] = {0};
+	_hali_loop_array_t array[4] = {0};
 	int ret = 0;
 
 	memset(data0, 0x0, sizeof(data0));
 	memset(data1, 0x0, sizeof(data1));
-	hali_loop_array_init(&array[0], data0, sizeof(data0));
+	hali_loop_array_init(&array[0], data0, sizeof(data0), false);
 	hali_loop_array_write(&array[0], "12121212", 8);
 	hali_loop_array_read(&array[0], data1, 8);
 	printf("data1: %s\r\n", data1);
@@ -280,7 +308,7 @@ int main(void)
 
 	memset(data0, 0x0, sizeof(data0));
 	memset(data1, 0x0, sizeof(data1));
-	hali_loop_array_init(&array[0], data0, sizeof(data0));
+	hali_loop_array_init(&array[0], data0, sizeof(data0), false);
 	hali_loop_array_write(&array[0], "12121212", 8);
 	hali_loop_array_read(&array[0], data1, 10);
 	printf("data1: %s\r\n", data1);
@@ -288,21 +316,21 @@ int main(void)
 
 	memset(data0, 0x0, sizeof(data0));
 	memset(data1, 0x0, sizeof(data1));
-	hali_loop_array_init(&array[0], data0, sizeof(data0));
-	hali_loop_array_write(&array[0], "12121212", 8);
-	hali_loop_array_read(&array[0], data1, 20);
+	hali_loop_array_init(&array[1], data0, sizeof(data0), true);
+	hali_loop_array_write(&array[1], "12121212", 8);
+	hali_loop_array_read(&array[1], data1, 10);
 	printf("data1: %s\r\n", data1);
-	hali_loop_array_write(&array[0], "23232323", 8);
-	hali_loop_array_read(&array[0], data1, 20);
+	hali_loop_array_write(&array[1], "23232323", 8);
+	hali_loop_array_read(&array[1], data1, 10);
 	printf("data1: %s\r\n", data1);
 	printf("\r\n-----------------------------------------------------\r\n");
 
 	memset(data0, 0x0, sizeof(data0));
 	memset(data1, 0x0, sizeof(data1));
-	hali_loop_array_init(&array[0], data0, sizeof(data0));
-	hali_loop_array_write(&array[0], "12121212", 8);
-	hali_loop_array_write(&array[0], "23232323", 8);
-	hali_loop_array_read(&array[0], data1, 20);
+	hali_loop_array_init(&array[2], data0, sizeof(data0), true);
+	hali_loop_array_write(&array[2], "12121212", 8);
+	hali_loop_array_write(&array[2], "23232323", 8);
+	hali_loop_array_read(&array[2], data1, 10);
 	printf("data1: %s\r\n", data1);
 	printf("\r\n-----------------------------------------------------\r\n");
 
